@@ -4,6 +4,7 @@
 //
 // Copyright (c) 2026 Nicholas Smith
 
+import AppKit
 import Foundation
 import StatusItemKit
 
@@ -29,6 +30,10 @@ enum Entry {
             let seconds = arguments.dropFirst(flag + 1).first.flatMap(Double.init) ?? 5
             exit(TapTest.run(seconds: seconds) ? 0 : 1)
         }
-        print("SoundChain: the menu-bar app arrives in Task 9. Try --selftest or --taptest.")
+        let app = NSApplication.shared
+        let delegate = AppController()
+        app.delegate = delegate
+        app.setActivationPolicy(.accessory)
+        app.run()
     }
 }
