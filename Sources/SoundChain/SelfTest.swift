@@ -25,6 +25,7 @@ enum SelfTest {
 
         do {
             try renderChecks(check)
+            try runnerChecks(check)
         } catch {
             check(false, "unexpected error: \(error.localizedDescription)")
         }
@@ -71,6 +72,52 @@ enum SelfTest {
         if let original { try delayPlugin.restoreState(original) }
         check(abs(mix.value - before) < 0.001, "restoring state brings the parameter back")
         check((try? delayPlugin.restoreState(Data("not a plist".utf8))) == nil, "unreadable state is rejected")
+    }
+
+    static func runnerChecks(_ check: (Bool, String) -> Void) throws {
+        let runner = ChainRunner()
+        runner.setFormat(RenderFormat(sampleRate: sampleRate, maxFrames: 4096))
+
+        var chain = Chain()
+        let delaySlot = chain.add(component: delay, name: "AUDelay", manufacturer: "Apple")
+        chain.add(component: eq, name: "AUNBandEQ", manufacturer: "Apple")
+        let missing = chain.add(component: ComponentID("aufx", "zzzz", "zzzz")!, name: "Missing", manufacturer: "Nobody")
+        let garbled = chain.add(component: delay, name: "AUDelay (bad state)", manufacturer: "Apple")
+        chain.setState(Data("not a plist".utf8), id: garbled.id)
+
+        runner.sync(to: chain)
+        check(spin { !runner.isLoading }, "runner finishes loading")
+        check(runner.error(for: missing.id) != nil, "a missing plugin is flagged, not fatal")
+        check(runner.componentFailures[missing.component] != nil, "a failed component is remembered for the picker")
+        check(runner.plugin(for: garbled.id) != nil && runner.error(for: garbled.id) == nil,
+              "unreadable saved state falls back to the plugin's defaults")
+        check(runner.activeCount == 3, "the three loadable effects run")
+
+        chain.setBypassed(true, id: delaySlot.id)
+        runner.sync(to: chain)
+        check(runner.activeCount == 2, "a bypassed slot is left out")
+
+        chain.masterBypass = true
+        runner.sync(to: chain)
+        check(runner.activeCount == 0, "master bypass runs no effects")
+        if let raw = runner.source.load() {
+            let live = Unmanaged<RenderChain>.fromOpaque(raw).takeUnretainedValue()
+            check(render(live, blocks: 2).0 == sine(block: 1), "master bypass passes audio through")
+        } else {
+            check(false, "a snapshot is published")
+        }
+
+        chain.masterBypass = false
+        chain.remove(id: delaySlot.id)
+        runner.sync(to: chain)
+        check(runner.plugin(for: delaySlot.id) == nil, "a removed slot's plugin is released")
+        check(runner.retiredCount > 0, "replaced snapshots are retired, not freed at once")
+        runner.tick(now: Date().addingTimeInterval(ChainRunner.retireDelay + 1))
+        check(runner.retiredCount == 0, "retired snapshots are freed after the delay")
+
+        runner.setFormat(RenderFormat(sampleRate: 44_100, maxFrames: 4096))
+        check(runner.plugin(for: garbled.id)?.preparedFormat?.sampleRate == 44_100,
+              "a format change re-prepares loaded plugins")
     }
 
     // MARK: Helpers (also used by later self-tests)
