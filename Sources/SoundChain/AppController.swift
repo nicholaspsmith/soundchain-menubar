@@ -24,6 +24,14 @@ final class AppController: NSObject, NSApplicationDelegate {
     private let editors = EditorWindows()
     private var lastEditorCapture = Date()
     static let editorCaptureInterval: TimeInterval = 5
+    /// How long quitting waits for each plugin's settings before giving up on it.
+    static let quitCaptureTimeout: TimeInterval = 1
+    /// Reading `fullState` of an out-of-process plugin is a synchronous XPC call; a
+    /// plugin busy with its own UI (an authorization screen, say) can take seconds or
+    /// wait on us. So captures never run on the main thread.
+    private let captureQueue = DispatchQueue(label: "com.nicholaspsmith.SoundChain.capture",
+                                             qos: .utility, attributes: .concurrent)
+    private var capturesInFlight: Set<UUID> = []
 
     // MARK: Lifecycle
 
@@ -61,7 +69,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         editors.closeAll()
         for slot in chain.slots {
-            if let data = runner.captureState(for: slot.id) { chain.setState(data, id: slot.id) }
+            if let data = captureStateBlocking(slot.id) { chain.setState(data, id: slot.id) }
         }
         save()
         engine.stop()
@@ -109,10 +117,35 @@ final class AppController: NSObject, NSApplicationDelegate {
         editors.open(slotID: id, title: "\(slot.name) — \(slot.manufacturer)", unit: plugin.unit)
     }
 
-    /// Stores a plugin's current settings, saving only if they changed.
+    /// Reads a plugin's settings off the main thread, then stores them (saving only
+    /// if they changed). At most one capture per plugin is in flight, so a plugin that
+    /// stops answering cannot pile up work.
     private func captureState(_ id: UUID) {
-        guard let data = runner.captureState(for: id) else { return }
-        if chain.setState(data, id: id) { save() }
+        guard let plugin = runner.plugin(for: id), capturesInFlight.insert(id).inserted else { return }
+        captureQueue.async { [weak self] in
+            let data = plugin.captureState()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.capturesInFlight.remove(id)
+                if let data, self.chain.setState(data, id: id) { self.save() }
+            }
+        }
+    }
+
+    /// For quitting: waits up to `quitCaptureTimeout` for a plugin's settings.
+    private func captureStateBlocking(_ id: UUID) -> Data? {
+        guard let plugin = runner.plugin(for: id) else { return nil }
+        let done = DispatchSemaphore(value: 0)
+        let box = StateBox()
+        captureQueue.async {
+            box.data = plugin.captureState()
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + Self.quitCaptureTimeout) == .success else {
+            NSLog("SoundChain: gave up waiting for settings from slot %@", id.uuidString)
+            return nil
+        }
+        return box.data
     }
 
     private func chainDidChange() {
@@ -249,4 +282,9 @@ final class AppController: NSObject, NSApplicationDelegate {
 @available(macOS 14.2, *)
 private extension TapEngine.State {
     var isFailed: Bool { if case .failed = self { return true } else { return false } }
+}
+
+/// Carries a capture result from the capture queue back to a waiting thread.
+private final class StateBox: @unchecked Sendable {
+    var data: Data?
 }
