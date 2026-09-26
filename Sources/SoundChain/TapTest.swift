@@ -16,6 +16,7 @@ enum TapTest {
         let me = try? AudioHW.ownProcessObject()
         print("Own audio process object: \(me.map(String.init) ?? "NOT FOUND")")
         print("Capture permission: \(AudioPermission.status())")
+        print("Note: IO starts only once some app plays audio (tap auto-start), so play something.")
 
         let runner = ChainRunner()
         runner.sync(to: Chain())

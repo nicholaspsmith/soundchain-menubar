@@ -124,8 +124,31 @@ final class TapEngine {
             TapEngine.render(source: source, interleaved: interleaved,
                              input: input, inputTime: inputTime, output: output)
         }, "Installing the audio callback")
+        if let procID { Self.useOnlyTapInput(aggregateID, procID) }
         try AudioHW.check(AudioDeviceStart(aggregateID, procID), "Starting audio")
         state = .running(device: deviceName, sampleRate: rate, bufferFrames: frames)
+    }
+
+    /// The aggregate's input side holds the output device's own input streams (a
+    /// Scarlett's mic inputs, say) followed by the tap's stream. Leaving the device's
+    /// streams on makes coreaudiod demand Microphone permission, so turn off every
+    /// input stream except the last one, which is the tap.
+    private static func useOnlyTapInput(_ device: AudioObjectID, _ procID: AudioDeviceIOProcID) {
+        var address = AudioHW.addr(kAudioDevicePropertyIOProcStreamUsage, kAudioObjectPropertyScopeInput)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr, size > 0 else { return }
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: 8)
+        defer { raw.deallocate() }
+        let usage = raw.bindMemory(to: AudioHardwareIOProcStreamUsage.self, capacity: 1)
+        usage.pointee.mIOProc = unsafeBitCast(procID, to: UnsafeMutableRawPointer.self)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, raw) == noErr else { return }
+        let count = Int(usage.pointee.mNumberStreams)
+        guard count > 1 else { return }
+        let flags = raw.advanced(by: MemoryLayout<AudioHardwareIOProcStreamUsage>.offset(of: \.mStreamIsOn)!)
+            .bindMemory(to: UInt32.self, capacity: count)
+        for i in 0..<count { flags[i] = i == count - 1 ? 1 : 0 }
+        let status = AudioObjectSetPropertyData(device, &address, 0, nil, size, raw)
+        NSLog("SoundChain: input streams %d, tap-only usage set: %d", count, status)
     }
 
     private func teardown() {
