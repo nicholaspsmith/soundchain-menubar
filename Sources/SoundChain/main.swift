@@ -5,5 +5,11 @@
 // Copyright (c) 2026 Nicholas Smith
 
 import Foundation
+import StatusItemKit
 
-print("SoundChain: nothing to run yet.")
+LoginCLI.runIfRequested()
+
+if CommandLine.arguments.contains("--selftest") {
+    exit(SelfTest.run() ? 0 : 1)
+}
+print("SoundChain: the menu-bar app arrives in Task 9. Try --selftest.")
