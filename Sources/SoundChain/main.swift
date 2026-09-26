@@ -9,7 +9,26 @@ import StatusItemKit
 
 LoginCLI.runIfRequested()
 
-if CommandLine.arguments.contains("--selftest") {
-    exit(SelfTest.run() ? 0 : 1)
+// A top-level `guard #available` does not refine availability for the rest of
+// main.swift, so everything that needs macOS 14.2 lives in `Entry.run()`.
+if #available(macOS 14.2, *) {
+    Entry.run()
+} else {
+    FileHandle.standardError.write(Data("SoundChain needs macOS 14.2 or later.\n".utf8))
+    exit(1)
 }
-print("SoundChain: the menu-bar app arrives in Task 9. Try --selftest.")
+
+@available(macOS 14.2, *)
+enum Entry {
+    static func run() {
+        let arguments = CommandLine.arguments
+        if arguments.contains("--selftest") {
+            exit(SelfTest.run() ? 0 : 1)
+        }
+        if let flag = arguments.firstIndex(of: "--taptest") {
+            let seconds = arguments.dropFirst(flag + 1).first.flatMap(Double.init) ?? 5
+            exit(TapTest.run(seconds: seconds) ? 0 : 1)
+        }
+        print("SoundChain: the menu-bar app arrives in Task 9. Try --selftest or --taptest.")
+    }
+}
