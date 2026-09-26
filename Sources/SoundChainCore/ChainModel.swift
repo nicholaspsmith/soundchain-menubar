@@ -1,0 +1,113 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) 2026 Nicholas Smith
+
+import Foundation
+
+/// An Audio Unit's identity: its type, subtype and manufacturer four-char codes,
+/// as `auval` prints them ("aufx dely appl").
+public struct ComponentID: Codable, Hashable, Sendable {
+    public var type: UInt32
+    public var subtype: UInt32
+    public var manufacturer: UInt32
+
+    public init(type: UInt32, subtype: UInt32, manufacturer: UInt32) {
+        self.type = type
+        self.subtype = subtype
+        self.manufacturer = manufacturer
+    }
+
+    /// Builds an ID from three four-character ASCII codes; nil if any is not exactly four ASCII characters.
+    public init?(_ type: String, _ subtype: String, _ manufacturer: String) {
+        guard let t = Self.code(type), let s = Self.code(subtype), let m = Self.code(manufacturer) else { return nil }
+        self.init(type: t, subtype: s, manufacturer: m)
+    }
+
+    /// "aufx dely appl". Non-printable bytes show as "?".
+    public var fourCC: String {
+        [type, subtype, manufacturer].map(Self.string).joined(separator: " ")
+    }
+
+    static func code(_ text: String) -> UInt32? {
+        let bytes = Array(text.utf8)
+        guard bytes.count == 4, bytes.allSatisfy({ $0 < 0x80 }) else { return nil }
+        return bytes.reduce(0) { ($0 << 8) | UInt32($1) }
+    }
+
+    static func string(_ code: UInt32) -> String {
+        let bytes = [24, 16, 8, 0].map { UInt8((code >> UInt32($0)) & 0xFF) }
+        return String(bytes.map { (0x20...0x7E).contains($0) ? Character(UnicodeScalar($0)) : "?" })
+    }
+}
+
+/// One effect in the chain.
+public struct ChainSlot: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var component: ComponentID
+    public var name: String
+    public var manufacturer: String
+    public var bypassed: Bool
+    /// The plugin's `fullState`, as a binary property list.
+    public var state: Data?
+
+    public init(id: UUID = UUID(), component: ComponentID, name: String, manufacturer: String,
+                bypassed: Bool = false, state: Data? = nil) {
+        self.id = id
+        self.component = component
+        self.name = name
+        self.manufacturer = manufacturer
+        self.bypassed = bypassed
+        self.state = state
+    }
+}
+
+/// The one global effect chain, in processing order.
+public struct Chain: Codable, Equatable, Sendable {
+    public static let currentVersion = 1
+
+    public var version: Int
+    public var masterBypass: Bool
+    public var slots: [ChainSlot]
+
+    public init(masterBypass: Bool = false, slots: [ChainSlot] = []) {
+        version = Chain.currentVersion
+        self.masterBypass = masterBypass
+        self.slots = slots
+    }
+
+    public func slot(id: UUID) -> ChainSlot? { slots.first { $0.id == id } }
+
+    @discardableResult
+    public mutating func add(component: ComponentID, name: String, manufacturer: String) -> ChainSlot {
+        let slot = ChainSlot(component: component, name: name, manufacturer: manufacturer)
+        slots.append(slot)
+        return slot
+    }
+
+    public mutating func remove(id: UUID) { slots.removeAll { $0.id == id } }
+
+    /// Moves the slot at `from` so it lands before the slot that was at
+    /// `insertionIndex` (the index NSTableView reports for a drop "above" a row).
+    /// Out-of-range input is ignored.
+    public mutating func move(from: Int, insertionIndex: Int) {
+        guard slots.indices.contains(from), (0...slots.count).contains(insertionIndex) else { return }
+        let slot = slots.remove(at: from)
+        let target = insertionIndex > from ? insertionIndex - 1 : insertionIndex
+        slots.insert(slot, at: target)
+    }
+
+    public mutating func setBypassed(_ bypassed: Bool, id: UUID) {
+        guard let i = slots.firstIndex(where: { $0.id == id }) else { return }
+        slots[i].bypassed = bypassed
+    }
+
+    /// Stores a plugin's state. Returns true only when the stored value changed.
+    @discardableResult
+    public mutating func setState(_ state: Data?, id: UUID) -> Bool {
+        guard let i = slots.firstIndex(where: { $0.id == id }), slots[i].state != state else { return false }
+        slots[i].state = state
+        return true
+    }
+}
