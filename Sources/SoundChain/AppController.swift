@@ -20,6 +20,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// A one-off message for the menu (corrupt chain file, crash-loop bypass, save failure).
     private var notice: String?
     private var permissionDenied = false
+    private var chainWindow: ChainWindowController?
 
     // MARK: Lifecycle
 
@@ -98,7 +99,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func chainDidChange() {
         refreshIcon()
-        // Task 10: chain window reload goes here.
+        chainWindow?.reload()
     }
 
     private func save() {
@@ -159,7 +160,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         let bypass = item("Bypass", #selector(toggleBypass), key: "b")
         bypass.state = chain.masterBypass ? .on : .off
         menu.addItem(bypass)
-        // Task 10: "Edit Chain…" goes here.
+        menu.addItem(item("Edit Chain…", #selector(editChain), key: "e"))
         if permissionDenied {
             menu.addItem(item("Grant System Audio Recording…", #selector(grantPermission)))
         }
@@ -185,6 +186,27 @@ final class AppController: NSObject, NSApplicationDelegate {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = false
         return item
+    }
+
+    @objc private func editChain() {
+        if chainWindow == nil { chainWindow = makeChainWindow() }
+        chainWindow?.present()
+    }
+
+    private func makeChainWindow() -> ChainWindowController {
+        let window = ChainWindowController()
+        window.rows = { [unowned self] in
+            self.chain.slots.map { ChainWindowController.Row(slot: $0, error: self.runner.error(for: $0.id)) }
+        }
+        window.catalog = { [unowned self] in ComponentScanner.effects(failures: self.runner.componentFailures) }
+        window.onBypass = { [unowned self] id, bypassed in self.mutate { $0.setBypassed(bypassed, id: id) } }
+        window.onMove = { [unowned self] from, to in self.mutate { $0.move(from: from, insertionIndex: to) } }
+        window.onRemove = { [unowned self] id in self.mutate { $0.remove(id: id) } }
+        window.onAdd = { [unowned self] entry in
+            self.mutate { $0.add(component: entry.component, name: entry.name, manufacturer: entry.manufacturer) }
+        }
+        // Task 11: onOpen / canOpen wiring goes here.
+        return window
     }
 
     @objc private func toggleBypass() {
