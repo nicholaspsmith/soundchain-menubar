@@ -21,6 +21,9 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var notice: String?
     private var permissionDenied = false
     private var chainWindow: ChainWindowController?
+    private let editors = EditorWindows()
+    private var lastEditorCapture = Date()
+    static let editorCaptureInterval: TimeInterval = 5
 
     // MARK: Lifecycle
 
@@ -52,11 +55,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         engine.onStateChange = { [weak self] _ in self?.refreshIcon() }
         runner.sync(to: chain)
         startAudio()
-        // Task 11: editor wiring goes here.
+        editors.onClose = { [weak self] id in self?.captureState(id) }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // Task 11: close editors here, before states are captured.
+        editors.closeAll()
         for slot in chain.slots {
             if let data = runner.captureState(for: slot.id) { chain.setState(data, id: slot.id) }
         }
@@ -84,7 +87,11 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func tick() {
         runner.tick()
-        // Task 11: periodic editor state capture goes here.
+        if !editors.openSlotIDs.isEmpty,
+           Date().timeIntervalSince(lastEditorCapture) >= Self.editorCaptureInterval {
+            lastEditorCapture = Date()
+            editors.openSlotIDs.forEach(captureState)
+        }
         refreshIcon()
     }
 
@@ -95,6 +102,17 @@ final class AppController: NSObject, NSApplicationDelegate {
         change(&chain)
         save()
         runner.sync(to: chain)
+    }
+
+    private func openEditor(_ id: UUID) {
+        guard let slot = chain.slot(id: id), let plugin = runner.plugin(for: id) else { return }
+        editors.open(slotID: id, title: "\(slot.name) — \(slot.manufacturer)", unit: plugin.unit)
+    }
+
+    /// Stores a plugin's current settings, saving only if they changed.
+    private func captureState(_ id: UUID) {
+        guard let data = runner.captureState(for: id) else { return }
+        if chain.setState(data, id: id) { save() }
     }
 
     private func chainDidChange() {
@@ -201,11 +219,15 @@ final class AppController: NSObject, NSApplicationDelegate {
         window.catalog = { [unowned self] in ComponentScanner.effects(failures: self.runner.componentFailures) }
         window.onBypass = { [unowned self] id, bypassed in self.mutate { $0.setBypassed(bypassed, id: id) } }
         window.onMove = { [unowned self] from, to in self.mutate { $0.move(from: from, insertionIndex: to) } }
-        window.onRemove = { [unowned self] id in self.mutate { $0.remove(id: id) } }
+        window.onRemove = { [unowned self] id in
+            self.editors.close(slotID: id)
+            self.mutate { $0.remove(id: id) }
+        }
         window.onAdd = { [unowned self] entry in
             self.mutate { $0.add(component: entry.component, name: entry.name, manufacturer: entry.manufacturer) }
         }
-        // Task 11: onOpen / canOpen wiring goes here.
+        window.canOpen = true
+        window.onOpen = { [unowned self] id in self.openEditor(id) }
         return window
     }
 
