@@ -8,15 +8,20 @@ import AppKit
 import AudioToolbox
 import CoreAudioKit
 
-/// One floating panel per open plugin editor. A plugin with no UI of its own gets
+/// One floating panel per plugin editor. A plugin with no UI of its own gets
 /// Apple's generic parameter view. Main thread.
+///
+/// Closing a panel only hides it: the AUv2 bridge hands out a plugin's own view
+/// controller once per instance (later requests return nil), and moving that view
+/// into a new window crashes. So each slot's panel lives until the slot is removed.
 final class EditorWindows: NSObject, NSWindowDelegate {
     var onClose: (UUID) -> Void = { _ in }
 
     private var panels: [UUID: NSPanel] = [:]
     private var pending: Set<UUID> = []
 
-    var openSlotIDs: [UUID] { Array(panels.keys) }
+    /// Slots whose editor is currently on screen.
+    var openSlotIDs: [UUID] { panels.filter { $0.value.isVisible }.map(\.key) }
 
     func open(slotID: UUID, title: String, unit: AUAudioUnit) {
         if let panel = panels[slotID] {
@@ -34,9 +39,20 @@ final class EditorWindows: NSObject, NSWindowDelegate {
         }
     }
 
-    func close(slotID: UUID) { panels[slotID]?.close() }     // windowWillClose does the rest
+    /// Destroys a slot's panel for good (the slot was removed).
+    func close(slotID: UUID) {
+        guard let panel = panels.removeValue(forKey: slotID) else { return }
+        panel.orderOut(nil)
+        panel.contentViewController = nil
+    }
 
-    func closeAll() { Array(panels.values).forEach { $0.close() } }
+    /// Hides every visible editor, reporting each through `onClose` (used at quit).
+    func closeAll() {
+        for (id, panel) in panels where panel.isVisible {
+            onClose(id)
+            panel.orderOut(nil)
+        }
+    }
 
     private static func genericView(for unit: AUAudioUnit) -> NSViewController {
         let generic = AUGenericViewController()
@@ -65,11 +81,11 @@ final class EditorWindows: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func windowWillClose(_ notification: Notification) {
-        guard let panel = notification.object as? NSPanel,
-              let id = panels.first(where: { $0.value === panel })?.key else { return }
-        panels[id] = nil
-        onClose(id)                          // capture state while the view still exists
-        panel.contentViewController = nil
+    /// The close button hides the panel instead of closing it (see the type comment).
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard let id = panels.first(where: { $0.value === sender })?.key else { return true }
+        onClose(id)
+        sender.orderOut(nil)
+        return false
     }
 }
