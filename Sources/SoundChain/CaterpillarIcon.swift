@@ -8,18 +8,26 @@ import AppKit
 
 /// SoundChain's menu-bar character: a caterpillar wearing headphones. It grows one
 /// body segment per running effect (up to five) and its colour is the app's state:
-/// green processing, grey bypassed, red on an error. Every variant shares one 28x22
-/// canvas so the menu bar never shifts.
+/// green processing, grey bypassed, red on an error. Every variant shares one 36x22
+/// canvas so the menu bar never shifts. The drawing is laid out on a 28x22 grid and
+/// scaled up so it fills nearly the whole bar height.
 enum CaterpillarIcon {
     static let processing = NSColor(red: 0.30, green: 0.72, blue: 0.36, alpha: 1)
     static let bypassed = NSColor(white: 0.62, alpha: 1)
     static let error = NSColor(red: 0.90, green: 0.26, blue: 0.22, alpha: 1)
     static let maxSegments = 5
+    /// The artwork spans y 2.05…17.0 on its grid; this scale and offset stretch it to y 1…21.
+    static let scale: CGFloat = 1.34
+    static let offset = NSPoint(x: -0.3, y: 1 - 2.05 * 1.34)
 
     static func image(effects: Int, color: NSColor) -> NSImage {
         let segments = max(1, min(effects, maxSegments))
-        let image = NSImage(size: NSSize(width: 28, height: 22), flipped: false) { _ in
+        let image = NSImage(size: NSSize(width: 36, height: 22), flipped: false) { _ in
             guard let ctx = NSGraphicsContext.current else { return false }
+            let t = NSAffineTransform()
+            t.translateX(by: offset.x, yBy: offset.y)
+            t.scale(by: scale)
+            t.concat()
             draw(ctx, segments: segments, color: color)
             return true
         }
