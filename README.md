@@ -12,6 +12,8 @@ through whatever output is current.
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit). Part of
 the [Menubarn](https://widgets.nicksmith.software) widget library.
 
+**Version 1.0.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
 ## Requirements

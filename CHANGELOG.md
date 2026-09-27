@@ -7,10 +7,13 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
-## [Unreleased]
+## [1.0.0] - 2026-09-26
 
-- One chain of Audio Unit effects over all system audio, following the current output device
-- Chain window: searchable Add picker where you pin favourites to the top, drag to reorder, per-effect bypass, plugin icons
-- Each plugin's own editor in a floating panel; settings saved automatically
-- Plugins that crash SoundChain are disabled and listed last
-- Menu-bar caterpillar that shows running effects and state
+### First release
+
+- One chain of Audio Unit effects over all of your Mac's audio, following whatever output is current
+- Audio Chain window: a searchable Add picker where you pin favourites to the top, drag to reorder, untick to bypass one effect, and plugin icons
+- Each plugin's own editor in a floating panel; its settings are saved automatically
+- Plugins that crash SoundChain are disabled and listed last, and can be re-enabled; a crash while restoring settings just resets them
+- Bypass, Retry and Start at Login in the menu, with the output device, running effects and format at the top
+- A menu-bar caterpillar in headphones: one highlighted segment per running effect, green, grey when bypassed, red when something needs attention
