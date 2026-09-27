@@ -7,9 +7,9 @@
 import AppKit
 
 /// SoundChain's menu-bar character, drawn in a storybook style (ink outlines, soft
-/// shading): a caterpillar in black headphones. Its body is always five segments;
-/// the segments nearest the head light up, one per running effect, and the rest stay
-/// pale. Its colour is the app's state. Every variant shares one 36x22pt canvas so
+/// shading): a caterpillar in black headphones. Its body is always five segments, all
+/// the same colour as the head; each running effect puts a bright highlight on top of
+/// a segment, counting back from the head. Its colour is the app's state. Every variant shares one 36x22pt canvas so
 /// the menu bar never shifts.
 ///
 /// Each variant is drawn once at 8x and downsampled (high-quality interpolation) to
@@ -46,11 +46,12 @@ enum CaterpillarIcon {
 
     struct Palette {
         let light, mid, dark: NSColor          // lit segment / head shading
-        let paleLight, paleDark: NSColor       // unlit segments
         static let ink = NSColor(red: 0.22, green: 0.14, blue: 0.09, alpha: 1)
         static let cheek = NSColor(red: 0.98, green: 0.66, blue: 0.68, alpha: 0.9)
         static let phones = NSColor(white: 0.07, alpha: 1)
         static let phonesSheen = NSColor(white: 0.42, alpha: 1)
+        /// A faint light edge that keeps dark parts visible on a dark menu bar.
+        static let rim = NSColor(white: 1, alpha: 0.4)
 
         init(_ state: State) {
             let base: NSColor
@@ -63,8 +64,6 @@ enum CaterpillarIcon {
             light = base.blended(withFraction: 0.35, of: cream) ?? base
             mid = base
             dark = base.blended(withFraction: 0.30, of: .black) ?? base
-            paleLight = base.blended(withFraction: 0.72, of: cream) ?? base
-            paleDark = base.blended(withFraction: 0.50, of: cream) ?? base
         }
     }
 
@@ -122,21 +121,26 @@ enum CaterpillarIcon {
             let lift: CGFloat = i % 2 == 0 ? 0.5 : 0
             let bottom = groundY + 0.6 + lift
 
-            // leg with a little round foot
-            Palette.ink.set()
+            // leg with a little round foot, rimmed in light so it reads on a dark bar
             let leg = NSBezierPath()
             leg.move(to: NSPoint(x: cx, y: bottom + 0.8))
             leg.line(to: NSPoint(x: cx, y: groundY - 0.2))
-            leg.lineWidth = 0.75; leg.lineCapStyle = .round; leg.stroke()
-            NSBezierPath(ovalIn: NSRect(x: cx - 0.85, y: groundY - 0.75, width: 1.7, height: 1.0)).fill()
+            leg.lineCapStyle = .round
+            let foot = NSBezierPath(ovalIn: NSRect(x: cx - 0.85, y: groundY - 0.75, width: 1.7, height: 1.0))
+            Palette.rim.set()
+            leg.lineWidth = 1.45; leg.stroke()
+            foot.lineWidth = 0.7; foot.stroke()
+            Palette.ink.set()
+            leg.lineWidth = 0.75; leg.stroke()
+            foot.fill()
 
-            let isLit = i < lit
             let segment = NSBezierPath(ovalIn: NSRect(x: cx - r, y: bottom, width: r * 2, height: r * 2))
-            shaded(segment, light: isLit ? palette.light : palette.paleLight,
-                   dark: isLit ? palette.dark : palette.paleDark)
-            // a soft highlight on the upper back of each segment
-            NSColor(white: 1, alpha: isLit ? 0.35 : 0.25).set()
-            NSBezierPath(ovalIn: NSRect(x: cx - r * 0.55, y: bottom + r * 1.15, width: r * 0.8, height: r * 0.45)).fill()
+            shaded(segment, light: palette.light, dark: palette.dark)
+            // each running effect: a bright highlight on top of its segment
+            if i < lit {
+                NSColor(white: 1, alpha: 0.85).set()
+                NSBezierPath(ovalIn: NSRect(x: cx - r * 0.5, y: bottom + r * 1.25, width: r * 0.95, height: r * 0.5)).fill()
+            }
         }
 
         // Head.
@@ -163,10 +167,12 @@ enum CaterpillarIcon {
         // Glossy black headphones, with a faint light rim so they read on a dark bar.
         let band = NSBezierPath()
         band.move(to: NSPoint(x: 17.4, y: 10.4))
-        band.curve(to: NSPoint(x: 25.9, y: 12.4), controlPoint1: NSPoint(x: 17.6, y: 17.6), controlPoint2: NSPoint(x: 25.2, y: 18.2))
+        // The far end stops at the rim of the head, as if the band carries on behind it
+        // to an earpad on the other side.
+        band.curve(to: NSPoint(x: 26.2, y: 13.1), controlPoint1: NSPoint(x: 17.6, y: 17.6), controlPoint2: NSPoint(x: 25.4, y: 18.2))
         band.lineCapStyle = .round
         let cup = NSBezierPath(roundedRect: NSRect(x: 16.1, y: 6.8, width: 3.4, height: 5.0), xRadius: 1.4, yRadius: 1.4)
-        NSColor(white: 1, alpha: 0.35).set()
+        Palette.rim.set()
         band.lineWidth = 1.9; band.stroke()
         cup.lineWidth = 0.6; cup.stroke()
         Palette.phones.set()
