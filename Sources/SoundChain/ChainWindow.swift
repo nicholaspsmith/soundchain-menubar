@@ -125,6 +125,19 @@ final class ChainWindowController: NSWindowController, NSTableViewDataSource, NS
         return item
     }
 
+    /// Keep the dragged row centred on the cursor (the default image floats well above it).
+    func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession,
+                   willBeginAt screenPoint: NSPoint, forRowIndexes rowIndexes: IndexSet) {
+        guard let window = tableView.window else { return }
+        let cursor = tableView.convert(window.convertPoint(fromScreen: screenPoint), from: nil)
+        session.enumerateDraggingItems(options: [], for: tableView, classes: [NSPasteboardItem.self],
+                                       searchOptions: [:]) { item, _, _ in
+            var frame = item.draggingFrame
+            frame.origin.y = cursor.y - frame.height / 2
+            item.draggingFrame = frame
+        }
+    }
+
     func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int,
                    proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
         guard (info.draggingSource as? NSTableView) === table else { return [] }
@@ -189,13 +202,16 @@ final class SlotRowView: NSView {
         text.alignment = .leading
         text.spacing = 1
 
+        let icon = PluginIcons.view(for: row.slot.component, size: 26)
+        icon.alphaValue = row.slot.bypassed || row.error != nil ? 0.45 : 1
+
         let open = NSButton(title: "Open", target: self, action: #selector(openTapped))
         open.isEnabled = canOpen && row.error == nil
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
 
-        let stack = NSStackView(views: [handle, text, spacer, open])
+        let stack = NSStackView(views: [handle, icon, text, spacer, open])
         stack.orientation = .horizontal
         stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false

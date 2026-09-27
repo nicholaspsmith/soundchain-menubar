@@ -208,11 +208,11 @@ final class AppController: NSObject, NSApplicationDelegate {
     private func refreshIcon() {
         let color: NSColor
         switch health {
-        case .processing: color = .systemGreen
-        case .bypassed: color = .systemGray
-        case .error: color = .systemRed
+        case .processing: color = CaterpillarIcon.processing
+        case .bypassed: color = CaterpillarIcon.bypassed
+        case .error: color = CaterpillarIcon.error
         }
-        controller?.setIcon(MeterIcon.dot(color: color))
+        controller?.setIcon(CaterpillarIcon.image(effects: runner.activeCount, color: color))
     }
 
     private var statusLine: String {

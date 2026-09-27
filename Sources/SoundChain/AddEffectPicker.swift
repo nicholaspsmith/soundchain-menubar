@@ -124,16 +124,21 @@ final class AddEffectViewController: NSViewController, NSTableViewDataSource, NS
             label.font = .boldSystemFont(ofSize: NSFont.smallSystemFontSize)
             return label
         case .entry(let entry):
+            let label: NSTextField
             if entry.disabled {
-                let label = NSTextField(labelWithString: "\(entry.name) — \(entry.manufacturer)")
+                label = NSTextField(labelWithString: "\(entry.name) — \(entry.manufacturer)")
                 label.textColor = .disabledControlTextColor
-                label.lineBreakMode = .byTruncatingTail
-                return label
+            } else {
+                label = NSTextField(labelWithString: entry.loadError.map { "\(entry.name) — \($0)" } ?? entry.name)
+                label.textColor = entry.loadError == nil ? .labelColor : .systemRed
             }
-            let label = NSTextField(labelWithString: entry.loadError.map { "\(entry.name) — \($0)" } ?? entry.name)
-            label.textColor = entry.loadError == nil ? .labelColor : .systemRed
             label.lineBreakMode = .byTruncatingTail
-            return label
+            let icon = PluginIcons.view(for: entry.component, size: 16)
+            if entry.disabled || entry.loadError != nil { icon.alphaValue = 0.4 }
+            let row = NSStackView(views: [icon, label])
+            row.orientation = .horizontal
+            row.spacing = 6
+            return row
         }
     }
 }
