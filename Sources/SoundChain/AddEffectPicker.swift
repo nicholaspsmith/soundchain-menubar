@@ -18,9 +18,10 @@ final class AddEffectViewController: NSViewController, NSTableViewDataSource, NS
         case entry(CatalogEntry)
     }
 
-    private let entries: [CatalogEntry]
+    private var entries: [CatalogEntry]
     private let pins: () -> [String]
     private let onTogglePin: (CatalogEntry) -> Void
+    private let onReenable: (CatalogEntry) -> Void
     private let onPick: (CatalogEntry) -> Void
     private var items: [Item] = []
     private let search = NSSearchField()
@@ -28,8 +29,10 @@ final class AddEffectViewController: NSViewController, NSTableViewDataSource, NS
 
     init(entries: [CatalogEntry], pins: @escaping () -> [String] = { [] },
          onTogglePin: @escaping (CatalogEntry) -> Void = { _ in },
+         onReenable: @escaping (CatalogEntry) -> Void = { _ in },
          onPick: @escaping (CatalogEntry) -> Void) {
         self.entries = entries
+        self.onReenable = onReenable
         self.pins = pins
         self.onTogglePin = onTogglePin
         self.onPick = onPick
@@ -101,7 +104,14 @@ final class AddEffectViewController: NSViewController, NSTableViewDataSource, NS
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let row = table.clickedRow
-        guard items.indices.contains(row), case .entry(let entry) = items[row], !entry.disabled else { return }
+        guard items.indices.contains(row), case .entry(let entry) = items[row] else { return }
+        if entry.disabled {
+            let item = NSMenuItem(title: "Re-enable \(entry.name)", action: #selector(menuReenable(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = row
+            menu.addItem(item)
+            return
+        }
         let pinned = PinList.isPinned(entry.name, in: pins())
         let item = NSMenuItem(title: pinned ? "Unpin \(entry.name)" : "Pin \(entry.name)",
                               action: #selector(menuTogglePin(_:)), keyEquivalent: "")
@@ -111,6 +121,15 @@ final class AddEffectViewController: NSViewController, NSTableViewDataSource, NS
     }
 
     @objc private func menuTogglePin(_ sender: NSMenuItem) { togglePin(row: sender.tag) }
+
+    /// Gives a plugin that was disabled after a crash another chance.
+    @objc private func menuReenable(_ sender: NSMenuItem) {
+        guard items.indices.contains(sender.tag), case .entry(var entry) = items[sender.tag] else { return }
+        onReenable(entry)
+        entry.disabled = false
+        if let i = entries.firstIndex(where: { $0.component == entry.component }) { entries[i].disabled = false }
+        reloadItems(keeping: entry.component)
+    }
 
     private func isPickable(_ row: Int) -> Bool {
         guard items.indices.contains(row), case .entry(let entry) = items[row] else { return false }

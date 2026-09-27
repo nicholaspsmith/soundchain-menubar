@@ -52,6 +52,9 @@ final class LoadedPlugin {
 
     init(unit: AUAudioUnit) { self.unit = unit }
 
+    /// Out-of-process plugins answer property reads over XPC, which can stall.
+    var isOutOfProcess: Bool { !unit.isLoadedInProcess }
+
     /// Instantiates a plugin (AUv2 in-process; AUv3 per the system default).
     /// `completion` always runs on the main queue.
     static func load(_ id: ComponentID, completion: @escaping (Result<LoadedPlugin, Error>) -> Void) {

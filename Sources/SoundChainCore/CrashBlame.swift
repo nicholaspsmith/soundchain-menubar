@@ -7,51 +7,99 @@
 import Foundation
 
 /// Works out which plugin crashed SoundChain. Before a risky step with a plugin
-/// (loading it, opening its editor) the app calls `begin`, and `end` once it is
-/// through. Both write to disk immediately, so the marker survives a crash. At the
-/// next launch, if the last run ended uncleanly, every component still marked is
-/// disabled for good; disabled components are never loaded again.
+/// (loading it, restoring its saved settings, building its editor) the app calls
+/// `begin`, and `end` once it is through. Both write to disk immediately, so the
+/// marker survives a crash. At the next launch, if the last run ended uncleanly:
+/// a plugin caught mid-load or mid-editor is disabled for good (never loaded again),
+/// and one caught mid-restore is reported so its saved settings can be dropped
+/// instead. A marker older than `markerLifetime` is expired by the app, so a step
+/// that never finishes (a plugin that never answers) cannot blame it for a later,
+/// unrelated crash.
 public final class CrashBlame {
+    public enum Step: String, Codable, Sendable { case load, restore, editor }
+
+    public struct Result: Equatable {
+        public var disabled: [ComponentID] = []
+        public var badState: [ComponentID] = []
+    }
+
+    struct Marker: Codable, Equatable {
+        var component: ComponentID
+        var step: Step
+        var started: Date
+    }
+
     static let inProgressFile = "in-progress.json"
     static let disabledFile = "disabled.json"
+    /// Loads and editor builds finish in well under this.
+    public static let markerLifetime: TimeInterval = 20
 
     private let directory: URL
-    private var inProgress: [ComponentID]
+    private var inProgress: [Marker]
     public private(set) var disabled: Set<ComponentID>
 
     public init(directory: URL) {
         self.directory = directory
-        inProgress = Self.read([ComponentID].self, directory.appendingPathComponent(Self.inProgressFile)) ?? []
+        inProgress = Self.read([Marker].self, directory.appendingPathComponent(Self.inProgressFile)) ?? []
         disabled = Set(Self.read([ComponentID].self, directory.appendingPathComponent(Self.disabledFile)) ?? [])
     }
 
     public func isDisabled(_ id: ComponentID) -> Bool { disabled.contains(id) }
 
-    public func begin(_ id: ComponentID) {
-        inProgress.append(id)
+    public func isInProgress(_ id: ComponentID, step: Step) -> Bool {
+        inProgress.contains { $0.component == id && $0.step == step }
+    }
+
+    public func begin(_ id: ComponentID, step: Step = .load, at now: Date = Date()) {
+        inProgress.append(Marker(component: id, step: step, started: now))
         writeInProgress()
     }
 
-    public func end(_ id: ComponentID) {
-        guard let i = inProgress.firstIndex(of: id) else { return }
+    public func end(_ id: ComponentID, step: Step = .load) {
+        guard let i = inProgress.firstIndex(where: { $0.component == id && $0.step == step }) else { return }
         inProgress.remove(at: i)
         writeInProgress()
     }
 
-    /// Call once at launch. Returns the components newly disabled (empty after a clean exit).
+    /// Drops markers that have been open longer than `age`.
+    public func expire(olderThan age: TimeInterval, now: Date = Date()) {
+        let kept = inProgress.filter { now.timeIntervalSince($0.started) < age }
+        guard kept.count != inProgress.count else { return }
+        inProgress = kept
+        writeInProgress()
+    }
+
+    /// Takes a component off the disabled list.
+    public func enable(_ id: ComponentID) {
+        guard disabled.remove(id) != nil else { return }
+        write(Array(disabled), Self.disabledFile)
+    }
+
+    /// Call once at launch. After an unclean exit, returns the components newly
+    /// disabled and those whose saved settings were being restored.
     @discardableResult
-    public func recordLaunch(lastExitUnclean: Bool) -> [ComponentID] {
-        var newlyDisabled: [ComponentID] = []
+    public func recordLaunch(lastExitUnclean: Bool) -> Result {
+        var result = Result()
         if lastExitUnclean {
-            for id in inProgress where disabled.insert(id).inserted { newlyDisabled.append(id) }
-            if !newlyDisabled.isEmpty { write(Array(disabled), Self.disabledFile) }
+            for marker in inProgress {
+                switch marker.step {
+                case .restore:
+                    if !result.badState.contains(marker.component) { result.badState.append(marker.component) }
+                case .load, .editor:
+                    if disabled.insert(marker.component).inserted { result.disabled.append(marker.component) }
+                }
+            }
+            if !result.disabled.isEmpty { write(Array(disabled), Self.disabledFile) }
         }
         inProgress = []
         writeInProgress()
-        return newlyDisabled
+        return result
     }
 
-    private func writeInProgress() { write(inProgress, Self.inProgressFile) }
+    private func writeInProgress() {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? JSONEncoder().encode(inProgress).write(to: directory.appendingPathComponent(Self.inProgressFile), options: .atomic)
+    }
 
     private func write(_ ids: [ComponentID], _ name: String) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

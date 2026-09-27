@@ -96,6 +96,7 @@ final class RenderChain {
             var flags = AudioUnitRenderActionFlags()
             let status = renderBlocks[stage](&flags, timestamp, AUAudioFrameCount(frames), 0,
                                              outList.unsafeMutablePointer, pull)
+            if status == kAudioUnitErr_CannotDoInCurrentContext { continue }   // "try again later": skip this cycle
             if status != noErr {
                 sc_flags_set(failed, Int32(stage))
                 continue

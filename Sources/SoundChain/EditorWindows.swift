@@ -50,10 +50,11 @@ final class EditorWindows: NSObject, NSWindowDelegate {
         panel.contentViewController = nil
     }
 
-    /// Hides every visible editor, reporting each through `onClose` (used at quit).
-    func closeAll() {
+    /// Hides every visible editor. At quit, pass `notify: false`: the app captures
+    /// every plugin's settings itself, so reporting each close would read them twice.
+    func closeAll(notify: Bool = true) {
         for (id, panel) in panels where panel.isVisible {
-            onClose(id)
+            if notify { onClose(id) }
             panel.orderOut(nil)
         }
     }

@@ -44,19 +44,26 @@ final class AppController: NSObject, NSApplicationDelegate {
     // MARK: Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        var startBypassed = crashGuard.recordLaunch()
+        let startBypassed = crashGuard.recordLaunch()
         let loaded = store.load()
         chain = loaded.chain
         if let backup = loaded.corruptBackup {
             notice = "The chain file was unreadable; it was moved to \(backup.lastPathComponent)"
         }
-        let culprits = blame.recordLaunch(lastExitUnclean: crashGuard.lastExitWasUnclean)
-        if !culprits.isEmpty {
-            // The cause is known and now disabled, so there is no need to start bypassed.
-            crashGuard.markStable()
-            startBypassed = false
-            let names = culprits.map { id in chain.slots.first { $0.component == id }?.name ?? id.fourCC }
-            notice = "Disabled \(names.joined(separator: ", ")) after it crashed SoundChain"
+        let blamed = blame.recordLaunch(lastExitUnclean: crashGuard.lastExitWasUnclean)
+        func names(_ ids: [ComponentID]) -> String {
+            ids.map { id in chain.slots.first { $0.component == id }?.name ?? id.fourCC }.joined(separator: ", ")
+        }
+        if !blamed.badState.isEmpty {
+            // It crashed while restoring saved settings: drop the settings, keep the plugin.
+            for slot in chain.slots where blamed.badState.contains(slot.component) { chain.setState(nil, id: slot.id) }
+            save()
+            notice = "Reset \(names(blamed.badState))'s settings after they crashed SoundChain"
+        }
+        if !blamed.disabled.isEmpty {
+            // The crash-loop count is left alone: if this blame was wrong, two strikes
+            // still start SoundChain bypassed.
+            notice = "Disabled \(names(blamed.disabled)) after it crashed SoundChain"
         }
         if startBypassed {
             chain.masterBypass = true
@@ -76,8 +83,8 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         runner.onChange = { [weak self] in self?.chainDidChange() }
         runner.isDisabled = { [blame] in blame.isDisabled($0) }
-        runner.willLoad = { [blame] in blame.begin($0) }
-        runner.didLoad = { [blame] in blame.end($0) }
+        runner.willStep = { [blame] id, step in blame.begin(id, step: step) }
+        runner.didStep = { [blame] id, step in blame.end(id, step: step) }
         engine.onFormat = { [weak self] format in self?.runner.setFormat(format) }
         engine.onStateChange = { [weak self] _ in self?.refreshIcon() }
         runner.sync(to: chain)
@@ -85,15 +92,15 @@ final class AppController: NSObject, NSApplicationDelegate {
         editors.onClose = { [weak self] id in self?.captureState(id) }
         editors.onPresented = { [weak self] id in
             // Some plugins crash on their own threads just after their view appears.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 guard let self, let component = self.editorsOpening.removeValue(forKey: id) else { return }
-                self.blame.end(component)
+                self.blame.end(component, step: .editor)
             }
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        editors.closeAll()
+        editors.closeAll(notify: false)
         for slot in chain.slots {
             if let data = captureStateBlocking(slot.id) { chain.setState(data, id: slot.id) }
         }
@@ -121,6 +128,12 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func tick() {
         runner.tick()
+        // A step that never finished (a plugin that never answered) must not be blamed
+        // for some later, unrelated crash.
+        blame.expire(olderThan: CrashBlame.markerLifetime)
+        editorsOpening = editorsOpening.filter { _, component in
+            blame.isInProgress(component, step: .editor)
+        }
         if !editors.openSlotIDs.isEmpty,
            Date().timeIntervalSince(lastEditorCapture) >= Self.editorCaptureInterval {
             lastEditorCapture = Date()
@@ -142,7 +155,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         guard let slot = chain.slot(id: id), let plugin = runner.plugin(for: id) else { return }
         if !editors.hasPanel(id), editorsOpening[id] == nil {
             editorsOpening[id] = slot.component
-            blame.begin(slot.component)
+            blame.begin(slot.component, step: .editor)
         }
         editors.open(slotID: id, title: "\(slot.name) — \(slot.manufacturer)", unit: plugin.unit)
     }
@@ -151,7 +164,15 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// if they changed). At most one capture per plugin is in flight, so a plugin that
     /// stops answering cannot pile up work.
     private func captureState(_ id: UUID) {
-        guard let plugin = runner.plugin(for: id), capturesInFlight.insert(id).inserted else { return }
+        guard let plugin = runner.plugin(for: id) else { return }
+        // In-process plugins are read here, on the main thread, like every other call
+        // into them (prepare, editors), so nothing touches one instance concurrently.
+        // Out-of-process ones answer over XPC, which can stall, so they go off main.
+        guard plugin.isOutOfProcess else {
+            if let data = plugin.captureState(), chain.setState(data, id: id) { save() }
+            return
+        }
+        guard capturesInFlight.insert(id).inserted else { return }
         captureQueue.async { [weak self] in
             let data = plugin.captureState()
             DispatchQueue.main.async {
@@ -165,6 +186,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// For quitting: waits up to `quitCaptureTimeout` for a plugin's settings.
     private func captureStateBlocking(_ id: UUID) -> Data? {
         guard let plugin = runner.plugin(for: id) else { return nil }
+        guard plugin.isOutOfProcess else { return plugin.captureState() }
         let done = DispatchSemaphore(value: 0)
         let box = StateBox()
         captureQueue.async {
@@ -292,6 +314,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             ComponentScanner.effects(failures: self.runner.componentFailures, disabled: self.blame.disabled)
         }
         window.pinned = { [unowned self] in self.pins }
+        window.onReenable = { [unowned self] entry in
+            self.blame.enable(entry.component)
+            self.runner.forgetDisabled(entry.component)
+            self.runner.sync(to: self.chain)
+        }
         window.onTogglePin = { [unowned self] entry in
             UserDefaults.standard.set(PinList.toggle(entry.name, in: self.pins), forKey: Self.pinsKey)
         }
@@ -318,6 +345,8 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     @objc private func retry() {
         notice = nil
+        runner.clearErrors()
+        runner.sync(to: chain)
         startAudio()
     }
 

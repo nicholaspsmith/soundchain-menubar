@@ -173,6 +173,8 @@ final class TapEngine {
                                input: UnsafePointer<AudioBufferList>, inputTime: UnsafePointer<AudioTimeStamp>,
                                output: UnsafeMutablePointer<AudioBufferList>) {
         let out = UnsafeMutableAudioBufferListPointer(output)
+        source.beginCycle()
+        defer { source.endCycle() }
         guard let raw = source.load() else { ChannelMap.zero(out); return }
         Unmanaged<RenderChain>.fromOpaque(raw)._withUnsafeGuaranteedRef { chain in
             let inputList = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))

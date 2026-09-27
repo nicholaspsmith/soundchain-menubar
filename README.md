@@ -65,14 +65,16 @@ at all.
 
 - **SoundChain crashes:** the private tap and aggregate vanish with it, so macOS
   plays your audio unprocessed.
-- **A plugin crashes it:** loading a plugin and building its editor are bracketed
-  by an on-disk marker. After a crash, the plugin that was mid-step is disabled for
-  good: never loaded again, and listed last in **Add…**, greyed out. The menu names
-  it. To re-enable everything, delete
-  `~/Library/Application Support/SoundChain/disabled.json`.
+- **A plugin crashes it:** loading a plugin, restoring its saved settings and
+  building its editor are each bracketed by an on-disk marker, and nothing new goes
+  live while a plugin is loading. After a crash, a plugin caught mid-load or
+  mid-editor is disabled: never loaded again, and listed last in **Add…**, greyed
+  out (right-click ▸ **Re-enable** to give it another chance). One caught
+  mid-restore keeps running with its saved settings reset. The menu says which.
 - **Unexplained crashes:** two in a row start the next launch bypassed.
-- **A plugin fails to open** (missing, unlicensed): it stays in the chain in red and
-  is skipped; its settings are kept.
+- **A plugin fails to open** (missing, unlicensed) or reports a render error: it
+  stays in the chain in red and is skipped, with its settings kept. **Retry** in the
+  menu, or unticking and re-ticking a slot, tries it again.
 
 ## Troubleshooting
 

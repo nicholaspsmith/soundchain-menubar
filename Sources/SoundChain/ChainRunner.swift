@@ -11,7 +11,8 @@ import SoundChainCore
 /// Main-thread owner of the loaded plugins. Turns a `Chain` into RenderChain
 /// snapshots and publishes them to the audio thread through `source`.
 final class ChainRunner {
-    /// Replaced snapshots are freed after this long, far more than any IO cycle.
+    /// Replaced snapshots are kept at least this long, and until every IO cycle that
+    /// began before the swap has finished (a stalled plugin can hold one for seconds).
     static let retireDelay: TimeInterval = 1.0
 
     let source = SnapshotSource.make()
@@ -19,9 +20,10 @@ final class ChainRunner {
     var onChange: (() -> Void)?
     /// Components that crashed SoundChain before; they are never loaded.
     var isDisabled: (ComponentID) -> Bool = { _ in false }
-    /// Bracket each plugin load, so a crash during one can be blamed on it.
-    var willLoad: (ComponentID) -> Void = { _ in }
-    var didLoad: (ComponentID) -> Void = { _ in }
+    /// Bracket each risky step with a plugin (load, restore), so a crash during one
+    /// can be blamed on it.
+    var willStep: (ComponentID, CrashBlame.Step) -> Void = { _, _ in }
+    var didStep: (ComponentID, CrashBlame.Step) -> Void = { _, _ in }
     static let disabledMessage = "Disabled: it crashed SoundChain"
 
     private(set) var format: RenderFormat?
@@ -36,8 +38,10 @@ final class ChainRunner {
     private var activeLoad: UUID?
     private var loadErrors: [UUID: String] = [:]
     private var renderErrors: [UUID: String] = [:]
-    private var retired: [(chain: RenderChain, at: Date)] = []
+    private var retired: [(chain: RenderChain, at: Date, cycles: Int64)] = []
     private var current: RenderChain?
+    /// A publish requested while plugins were loading; done when the queue drains.
+    private var publishPending = false
 
     var isLoading: Bool { !loading.isEmpty }
     /// Effects actually running in the published snapshot.
@@ -55,7 +59,8 @@ final class ChainRunner {
         let ids = Set(newChain.slots.map(\.id))
         for id in plugins.keys where !ids.contains(id) { plugins[id] = nil }
         loadErrors = loadErrors.filter { ids.contains($0.key) }
-        renderErrors = renderErrors.filter { ids.contains($0.key) }
+        // A slot the user bypassed gets a fresh start when re-enabled.
+        renderErrors = renderErrors.filter { id, _ in newChain.slot(id: id).map { !$0.bypassed } ?? false }
         for slot in newChain.slots
         where plugins[slot.id] == nil && !loading.contains(slot.id) && loadErrors[slot.id] == nil {
             if isDisabled(slot.component) {
@@ -74,7 +79,7 @@ final class ChainRunner {
     /// withdrawn first anyway, so no plugin is re-prepared while it could be rendering.
     func setFormat(_ newFormat: RenderFormat) {
         guard newFormat != format else { return }
-        if let old = source.swap(nil) { retired.append((old, Date())) }
+        retire(source.swap(nil))
         current = nil
         format = newFormat
         for (id, plugin) in plugins {
@@ -93,12 +98,36 @@ final class ChainRunner {
     /// slots). Returns true when new errors appeared.
     @discardableResult
     func tick(now: Date = Date()) -> Bool {
-        retired.removeAll { now.timeIntervalSince($0.at) >= Self.retireDelay }
+        let finished = source.cyclesFinished
+        retired.removeAll { now.timeIntervalSince($0.at) >= Self.retireDelay && finished >= $0.cycles }
         let failed = (current?.failedSlotIDs() ?? []).filter { renderErrors[$0] == nil }
         guard !failed.isEmpty else { return false }
-        for id in failed { renderErrors[id] = "Stopped: the plugin reported a render error" }
-        publish()
+        failed.forEach(recordRenderFailure)
         return true
+    }
+
+    /// Takes a slot out of the chain after its plugin reported a render error.
+    func recordRenderFailure(_ id: UUID) {
+        renderErrors[id] = "Stopped: the plugin reported a render error"
+        publish()
+    }
+
+    /// Clears the "disabled" error on slots of a component the user re-enabled, so
+    /// the next `sync` loads them. (`isDisabled` must already say false for it.)
+    func forgetDisabled(_ component: ComponentID) {
+        loadErrors = loadErrors.filter { id, message in
+            !(message == Self.disabledMessage && chain.slot(id: id)?.component == component)
+        }
+        componentFailures[component] = nil
+    }
+
+    /// Forgets load and render errors (Retry), so the next `sync` tries those plugins
+    /// again. Disabled components stay disabled.
+    func clearErrors() {
+        renderErrors.removeAll()
+        loadErrors = loadErrors.filter { $0.value == Self.disabledMessage }
+        componentFailures.removeAll()
+        publish()
     }
 
     // MARK: Private
@@ -113,15 +142,19 @@ final class ChainRunner {
             }
             loading.remove(id)                                   // removed while queued
         }
+        if publishPending { publish() }                          // the queue has drained
     }
+
+    private var isBusyLoading: Bool { activeLoad != nil || !loadQueue.isEmpty }
 
     private func load(_ slot: ChainSlot) {
         activeLoad = slot.id
-        willLoad(slot.component)
-        LoadedPlugin.load(slot.component) { [weak self] result in
+        let component = slot.component
+        willStep(component, .load)
+        LoadedPlugin.load(component) { [weak self] result in
             guard let self else { return }
+            self.didStep(component, .load)
             defer {
-                self.didLoad(slot.component)
                 self.activeLoad = nil
                 self.startNextLoad()
             }
@@ -130,13 +163,17 @@ final class ChainRunner {
             switch result {
             case .success(let plugin):
                 if let state = latest.state {
+                    self.willStep(component, .restore)
                     do {
                         try plugin.restoreState(state)
                     } catch {
                         NSLog("SoundChain: %@ kept its default settings: %@", latest.name, error.localizedDescription)
                     }
+                    self.didStep(component, .restore)
                 }
                 if let format = self.format {
+                    self.willStep(component, .load)
+                    defer { self.didStep(component, .load) }
                     do {
                         try plugin.prepare(format)
                     } catch {
@@ -159,15 +196,29 @@ final class ChainRunner {
         componentFailures[slot.component] = message
     }
 
+    /// Builds and swaps in a new snapshot. While plugins are loading, the swap waits
+    /// until the queue drains: no newly loaded plugin goes live while another is still
+    /// loading, so a crash in one plugin's render is never blamed on the one loading.
     private func publish() {
         guard let format else { onChange?(); return }
+        if isBusyLoading {
+            publishPending = true
+            onChange?()
+            return
+        }
+        publishPending = false
         let stages: [(slotID: UUID, unit: AUAudioUnit)] = chain.masterBypass ? [] : chain.slots.compactMap { slot in
             guard !slot.bypassed, renderErrors[slot.id] == nil, let plugin = plugins[slot.id] else { return nil }
             return (slotID: slot.id, unit: plugin.unit)
         }
         let next = RenderChain(stages: stages, maxFrames: format.maxFrames)
-        if let old = source.swap(next) { retired.append((old, Date())) }
+        retire(source.swap(next))
         current = next
         onChange?()
+    }
+
+    private func retire(_ old: RenderChain?) {
+        guard let old else { return }
+        retired.append((old, Date(), source.cyclesBegun))
     }
 }

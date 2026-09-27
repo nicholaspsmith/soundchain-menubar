@@ -11,8 +11,20 @@ import Foundation
 /// The cell holds a +1 retain on the published snapshot.
 struct SnapshotSource {
     let cell: OpaquePointer
+    /// IO cycles begun and finished, so a retired snapshot is only freed once every
+    /// cycle that could have loaded it has returned (see ChainRunner.tick).
+    let begun: OpaquePointer
+    let finished: OpaquePointer
 
-    static func make() -> SnapshotSource { SnapshotSource(cell: sc_atomic_ptr_create()) }
+    static func make() -> SnapshotSource {
+        SnapshotSource(cell: sc_atomic_ptr_create(), begun: sc_counter_create(), finished: sc_counter_create())
+    }
+
+    /// Audio thread: bracket every IO cycle.
+    @inline(__always) func beginCycle() { sc_counter_increment(begun) }
+    @inline(__always) func endCycle() { sc_counter_increment(finished) }
+    var cyclesBegun: Int64 { sc_counter_get(begun) }
+    var cyclesFinished: Int64 { sc_counter_get(finished) }
 
     /// Audio thread: the published snapshot, unretained, or nil.
     @inline(__always)

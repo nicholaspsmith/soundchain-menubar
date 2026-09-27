@@ -74,6 +74,8 @@ enum SelfTest {
         check((try? delayPlugin.restoreState(Data("not a plist".utf8))) == nil, "unreadable state is rejected")
     }
 
+    static var eqPluginState: Data?
+
     static func runnerChecks(_ check: (Bool, String) -> Void) throws {
         let runner = ChainRunner()
         runner.setFormat(RenderFormat(sampleRate: sampleRate, maxFrames: 4096))
@@ -115,6 +117,7 @@ enum SelfTest {
         runner.tick(now: Date().addingTimeInterval(ChainRunner.retireDelay + 1))
         check(runner.retiredCount == 0, "retired snapshots are freed after the delay")
 
+        eqPluginState = runner.plugin(for: garbled.id).flatMap { _ in try? loadSync(eq).captureState() }
         runner.setFormat(RenderFormat(sampleRate: 44_100, maxFrames: 4096))
         check(runner.plugin(for: garbled.id)?.preparedFormat?.sampleRate == 44_100,
               "a format change re-prepares loaded plugins")
@@ -123,15 +126,75 @@ enum SelfTest {
         guarded.setFormat(RenderFormat(sampleRate: sampleRate, maxFrames: 4096))
         var loads: [ComponentID] = []
         guarded.isDisabled = { $0 == eq }
-        guarded.willLoad = { loads.append($0) }
+        guarded.willStep = { id, step in if step == .load { loads.append(id) } }
         var blocked = Chain()
         let eqSlot = blocked.add(component: eq, name: "AUNBandEQ", manufacturer: "Apple")
         blocked.add(component: delay, name: "AUDelay", manufacturer: "Apple")
         guarded.sync(to: blocked)
         check(spin { !guarded.isLoading }, "a chain with a disabled plugin finishes loading")
-        check(!loads.contains(eq) && loads == [delay], "a disabled plugin is never loaded")
+        check(!loads.contains(eq) && Set(loads) == [delay], "a disabled plugin is never loaded")
         check(guarded.error(for: eqSlot.id) == ChainRunner.disabledMessage, "a disabled plugin's slot says why")
         check(guarded.activeCount == 1, "the rest of the chain still runs")
+        guarded.isDisabled = { _ in false }
+        guarded.forgetDisabled(eq)
+        guarded.sync(to: blocked)
+        check(spin { !guarded.isLoading }, "a re-enabled plugin loads")
+        check(guarded.error(for: eqSlot.id) == nil && guarded.activeCount == 2, "a re-enabled plugin rejoins the chain")
+
+        // No plugin renders while another is mid-load at launch, so a render crash can
+        // never be blamed on the plugin that happened to be loading.
+        let serial = ChainRunner()
+        serial.setFormat(RenderFormat(sampleRate: sampleRate, maxFrames: 4096))
+        var liveDuringLoad: [Int] = []
+        var steps: [CrashBlame.Step] = []
+        serial.willStep = { _, step in
+            steps.append(step)
+            if step == .load { liveDuringLoad.append(serial.activeCount) }
+        }
+        var three = Chain()
+        three.add(component: delay, name: "AUDelay", manufacturer: "Apple")
+        let eqWithState = three.add(component: eq, name: "AUNBandEQ", manufacturer: "Apple")
+        three.add(component: delay, name: "AUDelay 2", manufacturer: "Apple")
+        if let state = eqPluginState { three.setState(state, id: eqWithState.id) }
+        serial.sync(to: three)
+        check(serial.activeCount == 0, "nothing renders while the chain is still loading")
+        check(spin { !serial.isLoading }, "a three-plugin chain finishes loading")
+        check(liveDuringLoad.allSatisfy { $0 == 0 }, "no effect is live while a later plugin loads")
+        check(serial.activeCount == 3, "the whole chain goes live once loading finishes")
+        check(steps.contains(.restore), "restoring saved settings is marked as its own step")
+
+        // A retired snapshot outlives any audio cycle that began before the swap.
+        let cycles = ChainRunner()
+        cycles.setFormat(RenderFormat(sampleRate: sampleRate, maxFrames: 4096))
+        cycles.sync(to: Chain())
+        cycles.tick(now: Date().addingTimeInterval(ChainRunner.retireDelay + 1))
+        cycles.source.beginCycle()                      // the audio thread is mid-cycle…
+        var one = Chain()
+        one.masterBypass = true
+        cycles.sync(to: one)                            // …when a new snapshot is swapped in
+        cycles.tick(now: Date().addingTimeInterval(ChainRunner.retireDelay + 1))
+        check(cycles.retiredCount > 0, "a snapshot in use by an unfinished cycle is not freed")
+        cycles.source.endCycle()
+        cycles.tick(now: Date().addingTimeInterval(ChainRunner.retireDelay + 1))
+        check(cycles.retiredCount == 0, "it is freed once that cycle finishes")
+
+        // Render errors are recoverable.
+        let recover = ChainRunner()
+        recover.setFormat(RenderFormat(sampleRate: sampleRate, maxFrames: 4096))
+        var solo = Chain()
+        let soloSlot = solo.add(component: delay, name: "AUDelay", manufacturer: "Apple")
+        recover.sync(to: solo)
+        _ = spin { !recover.isLoading }
+        recover.recordRenderFailure(soloSlot.id)
+        check(recover.error(for: soloSlot.id) != nil && recover.activeCount == 0, "a render error takes the slot out")
+        solo.setBypassed(true, id: soloSlot.id); recover.sync(to: solo)
+        solo.setBypassed(false, id: soloSlot.id); recover.sync(to: solo)
+        check(recover.error(for: soloSlot.id) == nil && recover.activeCount == 1, "bypassing and re-enabling the slot retries it")
+        recover.recordRenderFailure(soloSlot.id)
+        recover.clearErrors()
+        recover.sync(to: solo)
+        _ = spin { !recover.isLoading }
+        check(recover.error(for: soloSlot.id) == nil && recover.activeCount == 1, "Retry clears render errors")
     }
 
     // MARK: Helpers (also used by later self-tests)
