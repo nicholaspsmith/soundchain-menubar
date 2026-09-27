@@ -61,3 +61,26 @@ final class CrashGuardTests: XCTestCase {
         XCTAssertTrue(CrashGuard(store: defaults).recordLaunch())
     }
 }
+
+final class CrashGuardLastExitTests: XCTestCase {
+    private final class Store: FlagStore {
+        var values: [String: Any] = [:]
+        func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
+        func integer(forKey key: String) -> Int { values[key] as? Int ?? 0 }
+        func set(_ value: Any?, forKey key: String) { values[key] = value }
+    }
+
+    func testReportsWhetherTheLastExitWasUnclean() {
+        let store = Store()
+        let first = CrashGuard(store: store)
+        _ = first.recordLaunch()
+        XCTAssertFalse(first.lastExitWasUnclean)
+        let second = CrashGuard(store: store)          // no clean exit in between
+        _ = second.recordLaunch()
+        XCTAssertTrue(second.lastExitWasUnclean)
+        second.recordCleanExit()
+        let third = CrashGuard(store: store)
+        _ = third.recordLaunch()
+        XCTAssertFalse(third.lastExitWasUnclean)
+    }
+}

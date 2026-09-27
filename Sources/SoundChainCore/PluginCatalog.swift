@@ -13,12 +13,16 @@ public struct CatalogEntry: Hashable, Sendable {
     public var manufacturer: String
     /// Why this plugin failed to load earlier in this session; nil if it has not failed.
     public var loadError: String?
+    /// True once this plugin has crashed SoundChain: it is listed last and cannot be picked.
+    public var disabled: Bool
 
-    public init(component: ComponentID, name: String, manufacturer: String, loadError: String? = nil) {
+    public init(component: ComponentID, name: String, manufacturer: String, loadError: String? = nil,
+                disabled: Bool = false) {
         self.component = component
         self.name = name
         self.manufacturer = manufacturer
         self.loadError = loadError
+        self.disabled = disabled
     }
 }
 
@@ -28,11 +32,19 @@ public struct CatalogGroup: Equatable, Sendable {
 }
 
 public enum PluginCatalog {
+    public static let pinnedGroupName = "Pinned"
+    public static let disabledGroupName = "Disabled after a crash"
+
     /// Groups entries by manufacturer (groups and names sorted case-insensitively),
     /// keeping only those where every whitespace-separated search term appears in
     /// the name or manufacturer. Unloadable entries stay in, flagged by `loadError`.
     /// Entries with the same component are collapsed to the first.
-    public static func groups(_ entries: [CatalogEntry], search: String = "") -> [CatalogGroup] {
+    ///
+    /// Entries whose name starts with one of `pinned` (case-insensitive) move to a
+    /// first "Pinned" group, in pin order. Disabled entries move to a last group,
+    /// whatever else applies to them.
+    public static func groups(_ entries: [CatalogEntry], search: String = "",
+                              pinned: [String] = []) -> [CatalogGroup] {
         let terms = search.split(whereSeparator: \.isWhitespace).map(String.init)
         var seen = Set<ComponentID>()
         let matching = entries.filter { entry in
@@ -42,6 +54,27 @@ public enum PluginCatalog {
                     || entry.manufacturer.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
             }
         }
+        func pinIndex(_ entry: CatalogEntry) -> Int? {
+            pinned.firstIndex { entry.name.range(of: $0, options: [.caseInsensitive, .anchored]) != nil }
+        }
+        let byName: (CatalogEntry, CatalogEntry) -> Bool = {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        let disabled = matching.filter(\.disabled).sorted(by: byName)
+        let enabled = matching.filter { !$0.disabled }
+        let pinnedEntries = enabled.compactMap { e in pinIndex(e).map { (e, $0) } }
+            .sorted { $0.1 != $1.1 ? $0.1 < $1.1 : byName($0.0, $1.0) }
+            .map(\.0)
+        let rest = enabled.filter { pinIndex($0) == nil }
+
+        var result: [CatalogGroup] = []
+        if !pinnedEntries.isEmpty { result.append(CatalogGroup(manufacturer: pinnedGroupName, entries: pinnedEntries)) }
+        result += makerGroups(rest)
+        if !disabled.isEmpty { result.append(CatalogGroup(manufacturer: disabledGroupName, entries: disabled)) }
+        return result
+    }
+
+    private static func makerGroups(_ matching: [CatalogEntry]) -> [CatalogGroup] {
         let byMaker = Dictionary(grouping: matching, by: \.manufacturer)
         return byMaker.keys
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }

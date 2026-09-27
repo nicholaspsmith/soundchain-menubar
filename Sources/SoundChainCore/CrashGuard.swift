@@ -29,9 +29,13 @@ public final class CrashGuard {
 
     public var uncleanExits: Int { store.integer(forKey: Self.uncleanKey) }
 
+    /// Set by `recordLaunch`: whether the previous run ended without a clean quit.
+    public private(set) var lastExitWasUnclean = false
+
     /// Call once, first thing at launch. Returns true when the app must start bypassed.
     public func recordLaunch() -> Bool {
-        if store.bool(forKey: Self.runningKey) {
+        lastExitWasUnclean = store.bool(forKey: Self.runningKey)
+        if lastExitWasUnclean {
             store.set(uncleanExits + 1, forKey: Self.uncleanKey)
         }
         store.set(true, forKey: Self.runningKey)
