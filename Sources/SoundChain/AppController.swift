@@ -226,6 +226,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         if permissionDenied { return .error }
         if case .failed = engine.state { return .error }
         if !slotErrors.isEmpty { return .error }
+        if case .running(_, _?, _, _) = engine.state { return .error }
         return chain.masterBypass ? .bypassed : .processing
     }
 
@@ -239,7 +240,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         controller?.setIcon(CharacterIcon.caterpillar(effects: runner.activeCount, state: state))
     }
 
-    /// The menu's status block: output device, what is running, and the format.
+    /// The menu's status block: output device (and a warning if it is virtual), what
+    /// is running, and the format.
     private var statusLines: [String] {
         if permissionDenied { return ["System audio recording isn't allowed"] }
         switch engine.state {
@@ -247,12 +249,12 @@ final class AppController: NSObject, NSApplicationDelegate {
             return ["Starting…"]
         case .failed(let why):
             return [why]
-        case .running(let device, let rate, let frames):
+        case .running(let device, let warning, let rate, let frames):
             let count = runner.activeCount
             let what = chain.masterBypass ? "Bypassed" : "\(count) effect\(count == 1 ? "" : "s") running"
             let khz = rate.truncatingRemainder(dividingBy: 1000) == 0
                 ? "\(Int(rate / 1000))" : String(format: "%.1f", rate / 1000)
-            return [device, what, "\(khz) kHz · \(frames) frames"]
+            return [device] + (warning.map { [$0] } ?? []) + [what, "\(khz) kHz · \(frames) frames"]
         }
     }
 

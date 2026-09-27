@@ -17,7 +17,8 @@ import SoundChainCore
 final class TapEngine {
     enum State: Equatable {
         case stopped
-        case running(device: String, sampleRate: Double, bufferFrames: Int)
+        /// `warning` is set when the output is one you probably cannot hear.
+        case running(device: String, warning: String?, sampleRate: Double, bufferFrames: Int)
         case failed(String)
     }
 
@@ -80,6 +81,7 @@ final class TapEngine {
         outputDevice = try AudioHW.defaultOutputDevice()
         let outputUID = try AudioHW.uid(outputDevice)
         let deviceName = AudioHW.name(outputDevice)
+        let warning = OutputCheck.warning(transportType: AudioHW.transportType(outputDevice))
         let me = try AudioHW.ownProcessObject()
 
         let description = CATapDescription(stereoGlobalTapButExcludeProcesses: [me])
@@ -126,7 +128,7 @@ final class TapEngine {
         }, "Installing the audio callback")
         if let procID { Self.useOnlyTapInput(aggregateID, procID) }
         try AudioHW.check(AudioDeviceStart(aggregateID, procID), "Starting audio")
-        state = .running(device: deviceName, sampleRate: rate, bufferFrames: frames)
+        state = .running(device: deviceName, warning: warning, sampleRate: rate, bufferFrames: frames)
     }
 
     /// The aggregate's input side holds the output device's own input streams (a
@@ -235,7 +237,7 @@ final class TapEngine {
     }
 
     private func needsRestart() -> Bool {
-        guard case .running(_, let rate, _) = state else { return true }
+        guard case .running(_, _, let rate, _) = state else { return true }
         guard let current = try? AudioHW.defaultOutputDevice(), current == outputDevice else { return true }
         return (try? AudioHW.nominalSampleRate(outputDevice)) != rate
     }

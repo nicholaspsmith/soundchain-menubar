@@ -47,6 +47,13 @@ highlight on one of its five segments, counting back from the head. Green means
 processing, grey means bypassed, red means something needs attention (the menu
 says what).
 
+SoundChain follows whatever output macOS picks, including a virtual one such as
+BlackHole, Zoom's, or a driver an uninstalled app left behind. Those have no
+speakers, so when the current output is virtual the caterpillar turns red and the
+menu says **⚠ Virtual output: may be silent** under the device name. macOS can
+pick one on its own when headphones disconnect; choose a real output in Control
+Center, or remove the stale driver from `/Library/Audio/Plug-Ins/HAL`.
+
 ## Pinned effects
 
 Click the pin beside any effect in **Add…** (or right-click ▸ Pin) to keep it in the
