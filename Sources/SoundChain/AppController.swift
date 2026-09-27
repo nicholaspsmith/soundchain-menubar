@@ -14,6 +14,13 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var yieldClient: YieldClient!
     private let store = ChainStore(url: ChainStore.defaultURL())
     private let crashGuard = CrashGuard(store: UserDefaults.standard)
+    private let blame = CrashBlame(directory: ChainStore.defaultURL().deletingLastPathComponent())
+    /// Effects pinned to the top of the Add picker (name prefixes). Override with
+    /// `defaults write com.nicholaspsmith.SoundChain PinnedEffects -array …`.
+    static let defaultPins = ["Pro-Q", "Pro-L 2", "Nectar 3"]
+    private var pins: [String] { UserDefaults.standard.stringArray(forKey: "PinnedEffects") ?? Self.defaultPins }
+    /// Slots whose editor is being built, with the component to blame if that crashes.
+    private var editorsOpening: [UUID: ComponentID] = [:]
     private let runner = ChainRunner()
     private lazy var engine = TapEngine(source: runner.source)
     private(set) var chain = Chain()
@@ -36,11 +43,19 @@ final class AppController: NSObject, NSApplicationDelegate {
     // MARK: Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let startBypassed = crashGuard.recordLaunch()
+        var startBypassed = crashGuard.recordLaunch()
         let loaded = store.load()
         chain = loaded.chain
         if let backup = loaded.corruptBackup {
             notice = "The chain file was unreadable; it was moved to \(backup.lastPathComponent)"
+        }
+        let culprits = blame.recordLaunch(lastExitUnclean: crashGuard.lastExitWasUnclean)
+        if !culprits.isEmpty {
+            // The cause is known and now disabled, so there is no need to start bypassed.
+            crashGuard.markStable()
+            startBypassed = false
+            let names = culprits.map { id in chain.slots.first { $0.component == id }?.name ?? id.fourCC }
+            notice = "Disabled \(names.joined(separator: ", ")) after it crashed SoundChain"
         }
         if startBypassed {
             chain.masterBypass = true
@@ -59,11 +74,21 @@ final class AppController: NSObject, NSApplicationDelegate {
         yieldClient.start()
 
         runner.onChange = { [weak self] in self?.chainDidChange() }
+        runner.isDisabled = { [blame] in blame.isDisabled($0) }
+        runner.willLoad = { [blame] in blame.begin($0) }
+        runner.didLoad = { [blame] in blame.end($0) }
         engine.onFormat = { [weak self] format in self?.runner.setFormat(format) }
         engine.onStateChange = { [weak self] _ in self?.refreshIcon() }
         runner.sync(to: chain)
         startAudio()
         editors.onClose = { [weak self] id in self?.captureState(id) }
+        editors.onPresented = { [weak self] id in
+            // Some plugins crash on their own threads just after their view appears.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                guard let self, let component = self.editorsOpening.removeValue(forKey: id) else { return }
+                self.blame.end(component)
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -114,6 +139,10 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func openEditor(_ id: UUID) {
         guard let slot = chain.slot(id: id), let plugin = runner.plugin(for: id) else { return }
+        if !editors.hasPanel(id), editorsOpening[id] == nil {
+            editorsOpening[id] = slot.component
+            blame.begin(slot.component)
+        }
         editors.open(slotID: id, title: "\(slot.name) — \(slot.manufacturer)", unit: plugin.unit)
     }
 
@@ -249,7 +278,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         window.rows = { [unowned self] in
             self.chain.slots.map { ChainWindowController.Row(slot: $0, error: self.runner.error(for: $0.id)) }
         }
-        window.catalog = { [unowned self] in ComponentScanner.effects(failures: self.runner.componentFailures) }
+        window.catalog = { [unowned self] in
+            ComponentScanner.effects(failures: self.runner.componentFailures, disabled: self.blame.disabled)
+        }
+        window.pinned = { [unowned self] in self.pins }
         window.onBypass = { [unowned self] id, bypassed in self.mutate { $0.setBypassed(bypassed, id: id) } }
         window.onMove = { [unowned self] from, to in self.mutate { $0.move(from: from, insertionIndex: to) } }
         window.onRemove = { [unowned self] id in

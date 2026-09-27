@@ -118,6 +118,20 @@ enum SelfTest {
         runner.setFormat(RenderFormat(sampleRate: 44_100, maxFrames: 4096))
         check(runner.plugin(for: garbled.id)?.preparedFormat?.sampleRate == 44_100,
               "a format change re-prepares loaded plugins")
+
+        let guarded = ChainRunner()
+        guarded.setFormat(RenderFormat(sampleRate: sampleRate, maxFrames: 4096))
+        var loads: [ComponentID] = []
+        guarded.isDisabled = { $0 == eq }
+        guarded.willLoad = { loads.append($0) }
+        var blocked = Chain()
+        let eqSlot = blocked.add(component: eq, name: "AUNBandEQ", manufacturer: "Apple")
+        blocked.add(component: delay, name: "AUDelay", manufacturer: "Apple")
+        guarded.sync(to: blocked)
+        check(spin { !guarded.isLoading }, "a chain with a disabled plugin finishes loading")
+        check(!loads.contains(eq) && loads == [delay], "a disabled plugin is never loaded")
+        check(guarded.error(for: eqSlot.id) == ChainRunner.disabledMessage, "a disabled plugin's slot says why")
+        check(guarded.activeCount == 1, "the rest of the chain still runs")
     }
 
     // MARK: Helpers (also used by later self-tests)

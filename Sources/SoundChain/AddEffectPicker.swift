@@ -17,13 +17,15 @@ final class AddEffectViewController: NSViewController, NSTableViewDataSource, NS
     }
 
     private let entries: [CatalogEntry]
+    private let pinned: [String]
     private let onPick: (CatalogEntry) -> Void
     private var items: [Item] = []
     private let search = NSSearchField()
     private let table = NSTableView()
 
-    init(entries: [CatalogEntry], onPick: @escaping (CatalogEntry) -> Void) {
+    init(entries: [CatalogEntry], pinned: [String] = [], onPick: @escaping (CatalogEntry) -> Void) {
         self.entries = entries
+        self.pinned = pinned
         self.onPick = onPick
         super.init(nibName: nil, bundle: nil)
     }
@@ -62,7 +64,7 @@ final class AddEffectViewController: NSViewController, NSTableViewDataSource, NS
     }
 
     private func reloadItems() {
-        items = PluginCatalog.groups(entries, search: search.stringValue).flatMap { group in
+        items = PluginCatalog.groups(entries, search: search.stringValue, pinned: pinned).flatMap { group in
             [Item.header(group.manufacturer)] + group.entries.map(Item.entry)
         }
         table.reloadData()
@@ -73,7 +75,7 @@ final class AddEffectViewController: NSViewController, NSTableViewDataSource, NS
 
     private func isPickable(_ row: Int) -> Bool {
         guard items.indices.contains(row), case .entry(let entry) = items[row] else { return false }
-        return entry.loadError == nil
+        return entry.loadError == nil && !entry.disabled
     }
 
     private func pick(row: Int) {
@@ -122,6 +124,12 @@ final class AddEffectViewController: NSViewController, NSTableViewDataSource, NS
             label.font = .boldSystemFont(ofSize: NSFont.smallSystemFontSize)
             return label
         case .entry(let entry):
+            if entry.disabled {
+                let label = NSTextField(labelWithString: "\(entry.name) — \(entry.manufacturer)")
+                label.textColor = .disabledControlTextColor
+                label.lineBreakMode = .byTruncatingTail
+                return label
+            }
             let label = NSTextField(labelWithString: entry.loadError.map { "\(entry.name) — \($0)" } ?? entry.name)
             label.textColor = entry.loadError == nil ? .labelColor : .systemRed
             label.lineBreakMode = .byTruncatingTail

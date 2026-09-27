@@ -17,6 +17,12 @@ final class ChainRunner {
     let source = SnapshotSource.make()
     /// Called after every publish and whenever errors change.
     var onChange: (() -> Void)?
+    /// Components that crashed SoundChain before; they are never loaded.
+    var isDisabled: (ComponentID) -> Bool = { _ in false }
+    /// Bracket each plugin load, so a crash during one can be blamed on it.
+    var willLoad: (ComponentID) -> Void = { _ in }
+    var didLoad: (ComponentID) -> Void = { _ in }
+    static let disabledMessage = "Disabled: it crashed SoundChain"
 
     private(set) var format: RenderFormat?
     /// Components that failed to load this session, for flagging in the Add picker.
@@ -25,6 +31,9 @@ final class ChainRunner {
     private var chain = Chain()
     private var plugins: [UUID: LoadedPlugin] = [:]
     private var loading: Set<UUID> = []
+    /// Loads run one at a time (so a crash is blamed on the right plugin).
+    private var loadQueue: [UUID] = []
+    private var activeLoad: UUID?
     private var loadErrors: [UUID: String] = [:]
     private var renderErrors: [UUID: String] = [:]
     private var retired: [(chain: RenderChain, at: Date)] = []
@@ -49,8 +58,14 @@ final class ChainRunner {
         renderErrors = renderErrors.filter { ids.contains($0.key) }
         for slot in newChain.slots
         where plugins[slot.id] == nil && !loading.contains(slot.id) && loadErrors[slot.id] == nil {
-            load(slot)
+            if isDisabled(slot.component) {
+                loadErrors[slot.id] = Self.disabledMessage
+                continue
+            }
+            loading.insert(slot.id)
+            loadQueue.append(slot.id)
         }
+        startNextLoad()
         publish()
     }
 
@@ -88,10 +103,28 @@ final class ChainRunner {
 
     // MARK: Private
 
+    private func startNextLoad() {
+        guard activeLoad == nil else { return }
+        while let id = loadQueue.first {
+            loadQueue.removeFirst()
+            if let slot = chain.slot(id: id) {
+                load(slot)
+                return
+            }
+            loading.remove(id)                                   // removed while queued
+        }
+    }
+
     private func load(_ slot: ChainSlot) {
-        loading.insert(slot.id)
+        activeLoad = slot.id
+        willLoad(slot.component)
         LoadedPlugin.load(slot.component) { [weak self] result in
             guard let self else { return }
+            defer {
+                self.didLoad(slot.component)
+                self.activeLoad = nil
+                self.startNextLoad()
+            }
             self.loading.remove(slot.id)
             guard let latest = self.chain.slot(id: slot.id) else { return }   // removed while loading
             switch result {

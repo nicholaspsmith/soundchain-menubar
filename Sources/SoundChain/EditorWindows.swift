@@ -16,9 +16,13 @@ import CoreAudioKit
 /// into a new window crashes. So each slot's panel lives until the slot is removed.
 final class EditorWindows: NSObject, NSWindowDelegate {
     var onClose: (UUID) -> Void = { _ in }
+    /// Called once a newly built editor is on screen.
+    var onPresented: (UUID) -> Void = { _ in }
 
     private var panels: [UUID: NSPanel] = [:]
     private var pending: Set<UUID> = []
+
+    func hasPanel(_ slotID: UUID) -> Bool { panels[slotID] != nil }
 
     /// Slots whose editor is currently on screen.
     var openSlotIDs: [UUID] { panels.filter { $0.value.isVisible }.map(\.key) }
@@ -79,6 +83,7 @@ final class EditorWindows: NSObject, NSWindowDelegate {
         panels[slotID] = panel
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        onPresented(slotID)
     }
 
     /// The close button hides the panel instead of closing it (see the type comment).
