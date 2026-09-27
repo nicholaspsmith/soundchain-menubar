@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleExecutable</key>
 	<string>SoundChain</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.nicholaspsmith.SoundChain</string>
 	<key>CFBundleName</key>
@@ -14,13 +16,13 @@
 	<string>0.1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>StatusItemKitVersion</key>
-	<string>0.1.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.2</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>SoundChain processes your Mac's audio through the effects you choose, then plays it back.</string>
+	<key>StatusItemKitVersion</key>
+	<string>0.1.0</string>
 </dict>
 </plist>
