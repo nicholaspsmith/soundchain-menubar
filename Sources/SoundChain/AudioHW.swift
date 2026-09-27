@@ -64,6 +64,11 @@ enum AudioHW {
         (try? string(device, kAudioObjectPropertyName, what: "Reading the output's name")) ?? "Unknown output"
     }
 
+    /// kAudioDeviceTransportType*; unknown (0) if it cannot be read.
+    static func transportType(_ device: AudioObjectID) -> UInt32 {
+        (try? get(device, kAudioDevicePropertyTransportType, initial: UInt32(0), what: "Reading the transport type")) ?? 0
+    }
+
     static func nominalSampleRate(_ device: AudioObjectID) throws -> Double {
         try get(device, kAudioDevicePropertyNominalSampleRate, initial: Float64(0), what: "Reading the sample rate")
     }

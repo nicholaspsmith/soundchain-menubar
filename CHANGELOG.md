@@ -7,6 +7,12 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.1.0] - 2026-09-27
+
+### Added
+
+- A warning when the output SoundChain is following is a virtual device (BlackHole, Zoom's, a leftover driver), which usually means you hear nothing: the caterpillar turns red and the menu says "⚠ Virtual output: may be silent" under the device name
+
 ## [1.0.2] - 2026-09-27
 
 ### Changed
