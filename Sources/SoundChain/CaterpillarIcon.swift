@@ -52,6 +52,8 @@ enum CaterpillarIcon {
         static let phonesSheen = NSColor(white: 0.42, alpha: 1)
         /// A faint light edge that keeps dark parts visible on a dark menu bar.
         static let rim = NSColor(white: 1, alpha: 0.4)
+        /// The legs are thin, so their rim is nearly opaque.
+        static let legRim = NSColor(white: 1, alpha: 0.85)
 
         init(_ state: State) {
             let base: NSColor
@@ -164,7 +166,7 @@ enum CaterpillarIcon {
             leg.line(to: NSPoint(x: cx, y: groundY - 0.2))
             leg.lineCapStyle = .round
             let foot = NSBezierPath(ovalIn: NSRect(x: cx - 0.85, y: groundY - 0.75, width: 1.7, height: 1.0))
-            Palette.rim.set()
+            Palette.legRim.set()
             leg.lineWidth = 1.45; leg.stroke()
             foot.lineWidth = 0.7; foot.stroke()
             Palette.ink.set()
