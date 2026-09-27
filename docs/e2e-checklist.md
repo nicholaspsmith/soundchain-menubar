@@ -11,3 +11,17 @@ Run with music playing. Record the date, macOS version and result of each step.
 7. Relaunch: chain and each plugin's settings are restored (open an editor to confirm).
 8. Corrupt the chain file (`echo junk > ~/Library/Application\ Support/SoundChain/chain.json`), relaunch: empty chain, menu names the `.corrupt-` backup file.
 9. Restore the moved-aside folder from step 1.
+
+## Results — 2026-09-26, macOS 26.6.2
+
+| Step | Result | Notes |
+|---|---|---|
+| 1 | Not re-run | Permission was already granted during development; first-run prompt verified then. |
+| 2 | Pass | Verified by hand (AUDelay echo, Bypass). |
+| 3 | Pass | Reorder persists; drag centring fixed and verified by hand. |
+| 4 | Pass | AirPods → Scarlett → AirPods during a 60 s tap test; audio kept playing. |
+| 5 | Pending | Needs a real sleep/wake with music playing. |
+| 6 | Pass | `pkill -9` twice: audio continued unprocessed; third launch started bypassed. |
+| 7 | Pass | Plugin settings restored after quit and relaunch (AUDelay, verified by hand). |
+| 8 | Pass | Junk chain file moved to `chain.json.corrupt-<UTC>`; empty chain loaded. Real chain restored afterwards. |
+| 9 | n/a | Step 1 not re-run. |
