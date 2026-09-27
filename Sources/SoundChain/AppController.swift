@@ -237,9 +237,6 @@ final class AppController: NSObject, NSApplicationDelegate {
         for error in slotErrors { menu.addItem(disabled(error)) }
         menu.addItem(.separator())
 
-        let bypass = item("Bypass", #selector(toggleBypass), key: "b")
-        bypass.state = chain.masterBypass ? .on : .off
-        menu.addItem(bypass)
         menu.addItem(item("Edit Chain…", #selector(editChain), key: "e"))
         if permissionDenied {
             menu.addItem(item("Grant System Audio Recording…", #selector(grantPermission)))
@@ -249,6 +246,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
+        let bypass = item("Bypass", #selector(toggleBypass))
+        bypass.state = chain.masterBypass ? .on : .off
+        menu.addItem(bypass)
         let login = item("Start at Login", #selector(toggleLogin))
         login.state = LoginItem.isEnabled ? .on : .off
         menu.addItem(login)
