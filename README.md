@@ -31,7 +31,7 @@ Start at Login is in the menu, or run `SoundChain --login on`.
 
 ## Use
 
-- **Audio Chain…** (⌘A) opens the chain. **Add…** searches installed effects;
+- **Audio Chain…** (⌃C) opens the chain. **Add…** searches installed effects;
   Pro-Q, Pro-L 2 and Nectar 3 are pinned at the top. Drag rows to reorder, untick
   one to bypass it, **Open** shows its own editor, **–** removes it (and selects the
   next row, so you can keep pressing).

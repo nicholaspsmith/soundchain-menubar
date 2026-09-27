@@ -81,6 +81,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         yieldClient = YieldClient(item: controller)
         yieldClient.start()
 
+        installEditMenu()
         runner.onChange = { [weak self] in self?.chainDidChange() }
         runner.isDisabled = { [blame] in blame.isDisabled($0) }
         runner.willStep = { [blame] id, step in blame.begin(id, step: step) }
@@ -267,7 +268,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         for error in slotErrors { menu.addItem(disabled(error)) }
         menu.addItem(.separator())
 
-        menu.addItem(item("Audio Chain…", #selector(editChain), key: "a"))
+        let chainItem = item("Audio Chain…", #selector(editChain), key: "c")
+        chainItem.keyEquivalentModifierMask = [.control]
+        menu.addItem(chainItem)
         if permissionDenied {
             menu.addItem(item("Grant System Audio Recording…", #selector(grantPermission)))
         }
@@ -298,6 +301,26 @@ final class AppController: NSObject, NSApplicationDelegate {
         item.isEnabled = false
         if short != title { item.toolTip = title }
         return item
+    }
+
+    /// A menu-bar app has no menu bar of its own, so nothing routes ⌘A/⌘C/⌘V/⌘X/⌘Z to
+    /// text fields (the Add picker's search). An invisible main menu with the
+    /// standard Edit items restores them while SoundChain's windows are active.
+    private func installEditMenu() {
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"))
+        edit.addItem(NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z"))
+        edit.addItem(.separator())
+        edit.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        edit.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        edit.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        edit.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+        let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        editItem.submenu = edit
+        let main = NSMenu()
+        main.addItem(NSMenuItem(title: "SoundChain", action: nil, keyEquivalent: ""))
+        main.addItem(editItem)
+        NSApp.mainMenu = main
     }
 
     @objc private func editChain() {
