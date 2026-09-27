@@ -7,6 +7,13 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.0.1] - 2026-09-26
+
+### Fixed
+
+- ⌘A, ⌘C, ⌘V, ⌘X and ⌘Z now work in the Add picker's search field
+- Audio Chain… moved to ⌃C, so it no longer competes with Select All
+
 ## [1.0.0] - 2026-09-26
 
 ### First release
