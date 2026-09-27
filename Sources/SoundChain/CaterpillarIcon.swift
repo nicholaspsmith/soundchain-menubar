@@ -110,8 +110,45 @@ enum CaterpillarIcon {
         path.stroke()
     }
 
+    // MARK: Headphones
+
+    /// The band as one cubic from the near earpad, over the crown, down behind the far
+    /// side of the head. It is drawn in two pieces split at `bandSplit`, a point above
+    /// the head: the back piece before the head (so the head hides its end) and the
+    /// front piece after it. Both are black with round caps, so the join is invisible.
+    static let band = (p0: NSPoint(x: 17.4, y: 10.4), p1: NSPoint(x: 17.6, y: 17.6),
+                       p2: NSPoint(x: 25.0, y: 18.2), p3: NSPoint(x: 24.8, y: 12.0))
+    static let bandSplit: CGFloat = 0.6
+    static let cupRect = NSRect(x: 16.1, y: 6.8, width: 3.4, height: 5.0)
+
+    /// The part of the band's cubic between parameters `t0` and `t1` (de Casteljau).
+    static func bandPath(from t0: CGFloat, to t1: CGFloat) -> NSBezierPath {
+        func split(_ p: [NSPoint], at t: CGFloat) -> (left: [NSPoint], right: [NSPoint]) {
+            func lerp(_ a: NSPoint, _ b: NSPoint) -> NSPoint { NSPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t) }
+            let a = lerp(p[0], p[1]), b = lerp(p[1], p[2]), c = lerp(p[2], p[3])
+            let d = lerp(a, b), e = lerp(b, c), f = lerp(d, e)
+            return ([p[0], a, d, f], [f, e, c, p[3]])
+        }
+        var pts = [band.p0, band.p1, band.p2, band.p3]
+        pts = split(pts, at: t0).right
+        pts = split(pts, at: t0 >= 1 ? 0 : (t1 - t0) / (1 - t0)).left
+        let path = NSBezierPath()
+        path.move(to: pts[0])
+        path.curve(to: pts[3], controlPoint1: pts[1], controlPoint2: pts[2])
+        path.lineCapStyle = .round
+        return path
+    }
+
     private static func draw(lit: Int, palette: Palette) {
         let groundY: CGFloat = 3.2
+
+        // Light rims for the headphones go down first, so they show only against the
+        // background (keeping the parts readable on a dark bar), never over the face.
+        Palette.rim.set()
+        let rimBand = bandPath(from: 0, to: 1)
+        rimBand.lineWidth = 1.9; rimBand.stroke()
+        let rimCup = NSBezierPath(roundedRect: cupRect.insetBy(dx: -0.3, dy: -0.3), xRadius: 1.6, yRadius: 1.6)
+        rimCup.fill()
 
         // Body: tail first so each segment overlaps the one behind it.
         let firstX: CGFloat = 15.4, spacing: CGFloat = 2.95
@@ -143,6 +180,11 @@ enum CaterpillarIcon {
             }
         }
 
+        // Back piece of the band: goes behind the head.
+        Palette.phones.set()
+        let back = bandPath(from: bandSplit, to: 1)
+        back.lineWidth = 1.3; back.stroke()
+
         // Head.
         let head = NSBezierPath(ovalIn: NSRect(x: 16.6, y: 4.4, width: 10.2, height: 10.2))
         shaded(head, light: palette.light, dark: palette.dark, ink: 0.6)
@@ -164,19 +206,11 @@ enum CaterpillarIcon {
         smile.curve(to: NSPoint(x: 25.6, y: 7.7), controlPoint1: NSPoint(x: 23.4, y: 5.9), controlPoint2: NSPoint(x: 25.0, y: 6.2))
         smile.lineWidth = 0.55; smile.lineCapStyle = .round; smile.stroke()
 
-        // Glossy black headphones, with a faint light rim so they read on a dark bar.
-        let band = NSBezierPath()
-        band.move(to: NSPoint(x: 17.4, y: 10.4))
-        // The far end stops at the rim of the head, as if the band carries on behind it
-        // to an earpad on the other side.
-        band.curve(to: NSPoint(x: 26.2, y: 13.1), controlPoint1: NSPoint(x: 17.6, y: 17.6), controlPoint2: NSPoint(x: 25.4, y: 18.2))
-        band.lineCapStyle = .round
-        let cup = NSBezierPath(roundedRect: NSRect(x: 16.1, y: 6.8, width: 3.4, height: 5.0), xRadius: 1.4, yRadius: 1.4)
-        Palette.rim.set()
-        band.lineWidth = 1.9; band.stroke()
-        cup.lineWidth = 0.6; cup.stroke()
+        // Front piece of the band and the near earpad, over the head.
         Palette.phones.set()
-        band.lineWidth = 1.3; band.stroke()
+        let front = bandPath(from: 0, to: bandSplit)
+        front.lineWidth = 1.3; front.stroke()
+        let cup = NSBezierPath(roundedRect: cupRect, xRadius: 1.4, yRadius: 1.4)
         NSGradient(starting: Palette.phonesSheen, ending: Palette.phones)?.draw(in: cup, angle: -70)
         // sheen along the band
         Palette.phonesSheen.withAlphaComponent(0.8).set()

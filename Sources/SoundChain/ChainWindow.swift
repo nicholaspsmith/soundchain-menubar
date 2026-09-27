@@ -31,6 +31,8 @@ final class ChainWindowController: NSWindowController, NSTableViewDataSource, NS
     private let removeButton = NSButton(title: "–", target: nil, action: nil)
     private var current: [Row] = []
     private var addPopover: NSPopover?
+    /// After a removal, the row index to select next (so repeated – presses keep deleting).
+    private var selectAfterRemove: Int?
 
     init() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 340),
@@ -59,7 +61,10 @@ final class ChainWindowController: NSWindowController, NSTableViewDataSource, NS
         table.reloadData()
         if let selected, let row = current.firstIndex(where: { $0.slot.id == selected }) {
             table.selectRowIndexes([row], byExtendingSelection: false)
+        } else if let row = selectAfterRemove, !current.isEmpty {
+            table.selectRowIndexes([min(row, current.count - 1)], byExtendingSelection: false)
         }
+        selectAfterRemove = nil
         removeButton.isEnabled = current.indices.contains(table.selectedRow)
     }
 
@@ -157,6 +162,7 @@ final class ChainWindowController: NSWindowController, NSTableViewDataSource, NS
 
     @objc private func removeSelected() {
         guard current.indices.contains(table.selectedRow) else { return }
+        selectAfterRemove = table.selectedRow
         onRemove(current[table.selectedRow].slot.id)
     }
 
