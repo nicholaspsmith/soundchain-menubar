@@ -43,9 +43,9 @@ says what).
 
 ## Pinned effects
 
-The Add picker's **Pinned** group matches name prefixes. Change it with:
-
-    defaults write com.nicholaspsmith.SoundChain PinnedEffects -array "Pro-Q" "Pro-L 2" "Nectar 3"
+Click the pin beside any effect in **Add…** (or right-click ▸ Pin) to keep it in the
+**Pinned** group at the top; click again to unpin. Pro-Q, Pro-L 2 and Nectar 3 start
+pinned. Pins match name prefixes, so "Pro-Q" also covers a later Pro-Q 4.
 
 ## How it works
 

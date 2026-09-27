@@ -10,7 +10,7 @@ and publishes the section as the release notes. Versions follow
 ## [Unreleased]
 
 - One chain of Audio Unit effects over all system audio, following the current output device
-- Chain window: searchable Add picker with pinned favourites, drag to reorder, per-effect bypass, plugin icons
+- Chain window: searchable Add picker where you pin favourites to the top, drag to reorder, per-effect bypass, plugin icons
 - Each plugin's own editor in a floating panel; settings saved automatically
 - Plugins that crash SoundChain are disabled and listed last
 - Menu-bar caterpillar that shows running effects and state

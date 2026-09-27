@@ -55,7 +55,7 @@ public enum PluginCatalog {
             }
         }
         func pinIndex(_ entry: CatalogEntry) -> Int? {
-            pinned.firstIndex { entry.name.range(of: $0, options: [.caseInsensitive, .anchored]) != nil }
+            pinned.firstIndex { PinList.matches(entry.name, $0) }
         }
         let byName: (CatalogEntry, CatalogEntry) -> Bool = {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
@@ -83,5 +83,31 @@ public enum PluginCatalog {
                     $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
                 })
             }
+    }
+}
+
+/// The user's pinned effects: name prefixes, matched case-insensitively from the
+/// start of the name ("Pro-Q" pins "Pro-Q 3" and a future "Pro-Q 4").
+public enum PinList {
+    static func matches(_ name: String, _ pin: String) -> Bool {
+        name.range(of: pin, options: [.caseInsensitive, .anchored]) != nil
+    }
+
+    public static func isPinned(_ name: String, in pins: [String]) -> Bool {
+        pins.contains { matches(name, $0) }
+    }
+
+    /// Adds `name` itself, unless a pin already covers it.
+    public static func pin(_ name: String, in pins: [String]) -> [String] {
+        isPinned(name, in: pins) ? pins : pins + [name]
+    }
+
+    /// Removes every pin that covers `name`.
+    public static func unpin(_ name: String, in pins: [String]) -> [String] {
+        pins.filter { !matches(name, $0) }
+    }
+
+    public static func toggle(_ name: String, in pins: [String]) -> [String] {
+        isPinned(name, in: pins) ? unpin(name, in: pins) : pin(name, in: pins)
     }
 }

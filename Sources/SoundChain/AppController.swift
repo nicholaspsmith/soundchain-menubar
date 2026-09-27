@@ -18,7 +18,8 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// Effects pinned to the top of the Add picker (name prefixes). Override with
     /// `defaults write com.nicholaspsmith.SoundChain PinnedEffects -array …`.
     static let defaultPins = ["Pro-Q", "Pro-L 2", "Nectar 3"]
-    private var pins: [String] { UserDefaults.standard.stringArray(forKey: "PinnedEffects") ?? Self.defaultPins }
+    static let pinsKey = "PinnedEffects"
+    private var pins: [String] { UserDefaults.standard.stringArray(forKey: Self.pinsKey) ?? Self.defaultPins }
     /// Slots whose editor is being built, with the component to blame if that crashes.
     private var editorsOpening: [UUID: ComponentID] = [:]
     private let runner = ChainRunner()
@@ -291,6 +292,9 @@ final class AppController: NSObject, NSApplicationDelegate {
             ComponentScanner.effects(failures: self.runner.componentFailures, disabled: self.blame.disabled)
         }
         window.pinned = { [unowned self] in self.pins }
+        window.onTogglePin = { [unowned self] entry in
+            UserDefaults.standard.set(PinList.toggle(entry.name, in: self.pins), forKey: Self.pinsKey)
+        }
         window.onBypass = { [unowned self] id, bypassed in self.mutate { $0.setBypassed(bypassed, id: id) } }
         window.onMove = { [unowned self] from, to in self.mutate { $0.move(from: from, insertionIndex: to) } }
         window.onRemove = { [unowned self] id in

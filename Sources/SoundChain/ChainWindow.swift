@@ -18,6 +18,7 @@ final class ChainWindowController: NSWindowController, NSTableViewDataSource, NS
     var rows: () -> [Row] = { [] }
     var catalog: () -> [CatalogEntry] = { [] }
     var pinned: () -> [String] = { [] }
+    var onTogglePin: (CatalogEntry) -> Void = { _ in }
     var onBypass: (UUID, Bool) -> Void = { _, _ in }
     var onMove: (Int, Int) -> Void = { _, _ in }
     var onRemove: (UUID) -> Void = { _ in }
@@ -167,7 +168,8 @@ final class ChainWindowController: NSWindowController, NSTableViewDataSource, NS
     }
 
     @objc private func showAdd(_ sender: NSButton) {
-        let picker = AddEffectViewController(entries: catalog(), pinned: pinned()) { [weak self] entry in
+        let picker = AddEffectViewController(entries: catalog(), pins: pinned,
+                                             onTogglePin: onTogglePin) { [weak self] entry in
             self?.addPopover?.close()
             self?.onAdd(entry)
         }

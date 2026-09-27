@@ -115,3 +115,35 @@ final class PluginCatalogPinningTests: XCTestCase {
         XCTAssertFalse(groups.dropLast().contains { $0.entries.contains(where: \.disabled) })
     }
 }
+
+final class PinListTests: XCTestCase {
+    private let pins = ["Pro-Q", "Pro-L 2", "Nectar 3"]
+
+    func testIsPinnedMatchesPrefixesCaseInsensitively() {
+        XCTAssertTrue(PinList.isPinned("Pro-Q 3", in: pins))
+        XCTAssertTrue(PinList.isPinned("nectar 3", in: pins))
+        XCTAssertFalse(PinList.isPinned("Pro-C 2", in: pins))
+    }
+
+    func testPinAppendsTheExactName() {
+        XCTAssertEqual(PinList.pin("Pro-C 2", in: pins), pins + ["Pro-C 2"])
+    }
+
+    func testPinningSomethingAlreadyPinnedChangesNothing() {
+        XCTAssertEqual(PinList.pin("Pro-Q 3", in: pins), pins)
+    }
+
+    func testUnpinRemovesEveryPinThatMatches() {
+        XCTAssertEqual(PinList.unpin("Pro-Q 3", in: pins), ["Pro-L 2", "Nectar 3"])
+        XCTAssertEqual(PinList.unpin("Pro-Q 3", in: ["Pro-Q", "Pro-Q 3", "Vinyl"]), ["Vinyl"])
+    }
+
+    func testUnpinningSomethingNotPinnedChangesNothing() {
+        XCTAssertEqual(PinList.unpin("Vinyl", in: pins), pins)
+    }
+
+    func testToggle() {
+        XCTAssertEqual(PinList.toggle("Vinyl", in: pins), pins + ["Vinyl"])
+        XCTAssertEqual(PinList.toggle("Pro-L 2", in: pins), ["Pro-Q", "Nectar 3"])
+    }
+}
