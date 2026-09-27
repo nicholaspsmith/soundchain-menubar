@@ -230,13 +230,13 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func refreshIcon() {
-        let state: CaterpillarIcon.State
+        let state: CaterpillarState
         switch health {
         case .processing: state = .processing
         case .bypassed: state = .bypassed
         case .error: state = .error
         }
-        controller?.setIcon(CaterpillarIcon.image(effects: runner.activeCount, state: state))
+        controller?.setIcon(CharacterIcon.caterpillar(effects: runner.activeCount, state: state))
     }
 
     /// The menu's status block: output device, what is running, and the format.

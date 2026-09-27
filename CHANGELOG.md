@@ -7,6 +7,12 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.0.2] - 2026-09-27
+
+### Changed
+
+- The menu-bar caterpillar now comes from StatusItemKit's shared character set, alongside the other Menubarn mascots. It looks the same.
+
 ## [1.0.1] - 2026-09-26
 
 ### Fixed
