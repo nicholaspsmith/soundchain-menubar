@@ -215,29 +215,36 @@ final class AppController: NSObject, NSApplicationDelegate {
         controller?.setIcon(CaterpillarIcon.image(effects: runner.activeCount, state: state))
     }
 
-    private var statusLine: String {
-        if permissionDenied { return "System audio recording isn't allowed" }
+    /// The menu's status block: output device, what is running, and the format.
+    private var statusLines: [String] {
+        if permissionDenied { return ["System audio recording isn't allowed"] }
         switch engine.state {
         case .stopped:
-            return "Starting…"
+            return ["Starting…"]
         case .failed(let why):
-            return why
+            return [why]
         case .running(let device, let rate, let frames):
             let count = runner.activeCount
-            let what = chain.masterBypass ? "bypassed" : "\(count) effect\(count == 1 ? "" : "s")"
-            return "\(device) · \(what) · \(Int(rate / 1000)) kHz / \(frames)"
+            let what = chain.masterBypass ? "Bypassed" : "\(count) effect\(count == 1 ? "" : "s") running"
+            let khz = rate.truncatingRemainder(dividingBy: 1000) == 0
+                ? "\(Int(rate / 1000))" : String(format: "%.1f", rate / 1000)
+            return [device, what, "\(khz) kHz · \(frames) frames"]
         }
     }
+
+    /// Menu lines longer than this are cut short (full text in the tooltip), so a
+    /// long device name or error cannot stretch the whole menu.
+    static let menuLineLimit = 34
 
     // MARK: Menu
 
     private func buildMenu(_ menu: NSMenu) {
-        menu.addItem(disabled(statusLine))
+        statusLines.forEach { menu.addItem(disabled($0)) }
         if let notice { menu.addItem(disabled(notice)) }
         for error in slotErrors { menu.addItem(disabled(error)) }
         menu.addItem(.separator())
 
-        menu.addItem(item("Edit Chain…", #selector(editChain), key: "e"))
+        menu.addItem(item("Audio Chain…", #selector(editChain), key: "a"))
         if permissionDenied {
             menu.addItem(item("Grant System Audio Recording…", #selector(grantPermission)))
         }
@@ -263,8 +270,10 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func disabled(_ title: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let short = title.count > Self.menuLineLimit ? String(title.prefix(Self.menuLineLimit - 1)) + "…" : title
+        let item = NSMenuItem(title: short, action: nil, keyEquivalent: "")
         item.isEnabled = false
+        if short != title { item.toolTip = title }
         return item
     }
 
