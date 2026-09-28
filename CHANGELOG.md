@@ -7,6 +7,12 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.1.1] - 2026-09-28
+
+### Changed
+
+- `install.sh` now asks whether to turn on Start at Login (skipped when it is already on, or when there is no terminal to ask in), then launches SoundChain, quitting any running copy first so the new build takes over
+
 ## [1.1.0] - 2026-09-27
 
 ### Added

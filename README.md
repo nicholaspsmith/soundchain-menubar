@@ -26,8 +26,9 @@ the [Menubarn](https://widgets.nicksmith.software) widget library.
     ./install.sh
 
 Builds `build/SoundChain.app` (via StatusItemKit's `make-app.sh`) and symlinks it
-into `~/Applications`. On first launch, allow **System Audio Recording** when asked.
-Start at Login is in the menu, or run `SoundChain --login on`.
+into `~/Applications`, asks whether to turn on Start at Login, then (re)launches the
+app. On first launch, allow **System Audio Recording** when asked.
+Start at Login is also in the menu, or run `SoundChain --login on`.
 
 ## Use
 

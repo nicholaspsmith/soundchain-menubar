@@ -19,5 +19,32 @@ else
 fi
 ln -sfn "$PWD/build/SoundChain.app" "$HOME/Applications/SoundChain.app"
 echo "Installed ~/Applications/SoundChain.app -> $PWD/build/SoundChain.app"
-echo "Start at Login: use the menu, or run"
-echo "    ~/Applications/SoundChain.app/Contents/MacOS/SoundChain --login on"
+
+# Ask to register Start at Login. SMAppService can only register the calling
+# process's own bundle, so this runs the installed binary's headless --login.
+BIN="$HOME/Applications/SoundChain.app/Contents/MacOS/SoundChain"
+if [ "$("$BIN" --login status 2>/dev/null)" = "on" ]; then
+    echo "Start at Login: already on"
+elif [ -t 0 ]; then
+    read -r -p "Start SoundChain at login? [Y/n] " answer
+    case "$answer" in
+        [nN]*) echo "Start at Login: left off (turn it on from the menu)" ;;
+        *) if "$BIN" --login on >/dev/null; then
+               echo "Start at Login: on"
+           else
+               echo "Start at Login: could not register (turn it on from the menu)" >&2
+           fi ;;
+    esac
+else
+    echo "Start at Login: off (not asked: no terminal). Turn it on from the menu, or run"
+    echo "    $BIN --login on"
+fi
+
+# Quit a running copy so the rebuild takes effect, then launch.
+if pgrep -xq SoundChain; then
+    osascript -e 'tell application id "com.nicholaspsmith.SoundChain" to quit' >/dev/null 2>&1 || true
+    for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -xq SoundChain || break; sleep 0.5; done
+    pkill -x SoundChain 2>/dev/null || true
+fi
+open "$HOME/Applications/SoundChain.app"
+echo "SoundChain is running in the menu bar."
