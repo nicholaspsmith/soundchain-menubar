@@ -55,6 +55,13 @@ menu says **⚠ Virtual output: may be silent** under the device name. macOS can
 pick one on its own when headphones disconnect; choose a real output in Control
 Center, or remove the stale driver from `/Library/Audio/Plug-Ins/HAL`.
 
+UAD-2 plugins (the "UAD …" ones, not native "UADx") run on the DSP in an Apollo,
+Satellite or UAD-2 card. With none attached, or the moment one is unplugged,
+SoundChain pauses them: they leave the chain (the rest keeps running), their editors
+close, and their last saved settings are kept. The caterpillar turns red, the menu
+says **⚠ No UAD hardware: N paused**, and those rows in Audio Chain say why.
+Reconnect the device and they load again on their own.
+
 ## Pinned effects
 
 Click the pin beside any effect in **Add…** (or right-click ▸ Pin) to keep it in the
@@ -63,8 +70,11 @@ pinned. Pins match name prefixes, so "Pro-Q" also covers a later Pro-Q 4.
 
 ## How it works
 
-A global Core Audio process tap captures every app's output except SoundChain's
-own and mutes the originals. The tap and the current default output device are
+A Core Audio process tap on the current output device captures every app's output
+to it, except SoundChain's own, channel for channel, and mutes the originals. The
+chain processes the device's preferred stereo pair (Audio MIDI Setup ▸ Configure
+Speakers; channels 5 and 6 on an Apollo) and writes it back to the same channels;
+any other channel passes through untouched. The tap and the current default output device are
 joined in a private aggregate device; its IO callback runs the effects in order
 and writes to the output. Chain edits build a new immutable render snapshot on
 the main thread and swap it in atomically, so the audio thread never waits. The

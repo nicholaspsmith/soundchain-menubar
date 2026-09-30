@@ -6,6 +6,7 @@
 
 import CoreAudio
 import Foundation
+import SoundChainCore
 
 struct CoreAudioError: LocalizedError {
     let what: String
@@ -67,6 +68,32 @@ enum AudioHW {
     /// kAudioDeviceTransportType*; unknown (0) if it cannot be read.
     static func transportType(_ device: AudioObjectID) -> UInt32 {
         (try? get(device, kAudioDevicePropertyTransportType, initial: UInt32(0), what: "Reading the transport type")) ?? 0
+    }
+
+    /// Each output stream's channel count, in order.
+    static func outputStreamChannels(_ device: AudioObjectID) -> [Int] {
+        var address = addr(kAudioDevicePropertyStreamConfiguration, kAudioObjectPropertyScopeOutput)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr, size > 0 else { return [] }
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: 16)
+        defer { raw.deallocate() }
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, raw) == noErr else { return [] }
+        let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
+        return list.map { Int($0.mNumberChannels) }
+    }
+
+    /// The output channels apps play stereo into (1-based); [] if unreadable.
+    static func preferredStereoChannels(_ device: AudioObjectID) -> [UInt32] {
+        var address = addr(kAudioDevicePropertyPreferredChannelsForStereo, kAudioObjectPropertyScopeOutput)
+        var pair: (UInt32, UInt32) = (0, 0)
+        var size = UInt32(MemoryLayout<(UInt32, UInt32)>.size)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &pair) == noErr else { return [] }
+        return [pair.0, pair.1]
+    }
+
+    /// Where stereo goes on this output device, or nil if it has no output channels.
+    static func stereoRoute(_ device: AudioObjectID) -> StereoRoute? {
+        StereoRoute.resolve(preferred: preferredStereoChannels(device), streamChannels: outputStreamChannels(device))
     }
 
     static func nominalSampleRate(_ device: AudioObjectID) throws -> Double {

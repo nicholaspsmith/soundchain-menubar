@@ -7,6 +7,20 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.2.0] - 2026-09-30
+
+### Added
+
+- UAD-2 plugins pause themselves when no UAD DSP (Apollo, Satellite or UAD-2 card) is attached, or the moment it is unplugged: they leave the chain before they can fail on the missing DSP, their editors close, and their saved settings are kept. They load again when the device returns. Meanwhile the caterpillar turns red, the menu says "⚠ No UAD hardware: N paused", and each such row in Audio Chain says why. Native UADx plugins are not affected
+
+### Fixed
+
+- Audio came out quieter with SoundChain running, even bypassed, on an output whose stereo pair is not channels 1 and 2 (an Apollo plays stereo on 5 and 6). The stereo-mixdown tap read that pair about 14 dB low, and the result went to channels 1 and 2. SoundChain now taps the output stream channel for channel, processes the device's preferred stereo pair (Audio MIDI Setup ▸ Configure Speakers) and writes it back there, passing every other channel through untouched. Bypass is unity gain again. Audio an app sends to some other device is no longer pulled into the chain
+
+### Changed
+
+- Removing, bypassing or failing a slot now takes it out of the running chain at once, even while another plugin is still loading (newly loaded plugins still wait for the queue to drain)
+
 ## [1.1.1] - 2026-09-28
 
 ### Changed
