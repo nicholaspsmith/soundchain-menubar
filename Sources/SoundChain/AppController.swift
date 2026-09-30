@@ -23,6 +23,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// Slots whose editor is being built, with the component to blame if that crashes.
     private var editorsOpening: [UUID: ComponentID] = [:]
     private let runner = ChainRunner()
+    private let uad = UADHardware()
     private lazy var engine = TapEngine(source: runner.source)
     private(set) var chain = Chain()
     /// A one-off message for the menu (corrupt chain file, crash-loop bypass, save failure).
@@ -88,6 +89,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         runner.didStep = { [blame] id, step in blame.end(id, step: step) }
         engine.onFormat = { [weak self] format in self?.runner.setFormat(format) }
         engine.onStateChange = { [weak self] _ in self?.refreshIcon() }
+        uad.onChange = { [weak self] in self?.chainDidChange() }
+        uad.start()
         runner.sync(to: chain)
         startAudio()
         editors.onClose = { [weak self] id in self?.captureState(id) }
@@ -226,9 +229,12 @@ final class AppController: NSObject, NSApplicationDelegate {
         if permissionDenied { return .error }
         if case .failed = engine.state { return .error }
         if !slotErrors.isEmpty { return .error }
+        if uadWarning != nil { return .error }
         if case .running(_, _?, _, _) = engine.state { return .error }
         return chain.masterBypass ? .bypassed : .processing
     }
+
+    private var uadWarning: String? { UADCheck.warning(chain: chain, hardwarePresent: uad.isPresent) }
 
     private func refreshIcon() {
         let state: CaterpillarState
@@ -268,6 +274,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         statusLines.forEach { menu.addItem(disabled($0)) }
         if let notice { menu.addItem(disabled(notice)) }
         for error in slotErrors { menu.addItem(disabled(error)) }
+        if let uadWarning { menu.addItem(disabled(uadWarning)) }
         menu.addItem(.separator())
 
         let chainItem = item("Audio Chain…", #selector(editChain), key: "c")
@@ -333,7 +340,11 @@ final class AppController: NSObject, NSApplicationDelegate {
     private func makeChainWindow() -> ChainWindowController {
         let window = ChainWindowController()
         window.rows = { [unowned self] in
-            self.chain.slots.map { ChainWindowController.Row(slot: $0, error: self.runner.error(for: $0.id)) }
+            let idle = Set(UADCheck.idleSlots(in: self.chain, hardwarePresent: self.uad.isPresent).map(\.id))
+            return self.chain.slots.map { slot in
+                ChainWindowController.Row(slot: slot, error: self.runner.error(for: slot.id)
+                                          ?? (idle.contains(slot.id) ? UADCheck.rowNote : nil))
+            }
         }
         window.catalog = { [unowned self] in
             ComponentScanner.effects(failures: self.runner.componentFailures, disabled: self.blame.disabled)

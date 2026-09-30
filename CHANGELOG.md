@@ -7,6 +7,12 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [Unreleased]
+
+### Added
+
+- A warning when the chain holds UAD-2 plugins but no UAD DSP (Apollo, Satellite or UAD-2 card) is attached, so they pass audio through untouched: the caterpillar turns red, the menu says "⚠ No UAD hardware: N idle", and each such row in Audio Chain says why. Native UADx plugins are not flagged
+
 ## [1.1.1] - 2026-09-28
 
 ### Changed

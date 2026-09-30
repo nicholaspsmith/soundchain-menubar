@@ -55,6 +55,12 @@ menu says **⚠ Virtual output: may be silent** under the device name. macOS can
 pick one on its own when headphones disconnect; choose a real output in Control
 Center, or remove the stale driver from `/Library/Audio/Plug-Ins/HAL`.
 
+UAD-2 plugins (the "UAD …" ones, not native "UADx") run on the DSP in an Apollo,
+Satellite or UAD-2 card. With none attached they load but pass audio through
+untouched, so the caterpillar turns red, the menu says **⚠ No UAD hardware: N idle**,
+and those rows in Audio Chain say why. Connect the device, or use a UADx or other
+native effect instead.
+
 ## Pinned effects
 
 Click the pin beside any effect in **Add…** (or right-click ▸ Pin) to keep it in the
