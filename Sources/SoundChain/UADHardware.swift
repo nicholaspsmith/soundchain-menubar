@@ -13,55 +13,57 @@ import IOKit
 final class UADHardware {
     static let serviceClass = "com_uaudio_driver_UAD2Pcie2"
 
-    private(set) var isPresent = false
+    var isPresent: Bool { count > 0 }
     var onChange: (() -> Void)?
+    private var count = 0
     private var port: IONotificationPortRef?
     private var iterators: [io_iterator_t] = []
 
+    /// Counts services from the notifications themselves: a terminated service can
+    /// still show up in a fresh match while its termination is being delivered.
     func start() {
         guard port == nil, let port = IONotificationPortCreate(kIOMainPortDefault) else { return }
         self.port = port
         IONotificationPortSetDispatchQueue(port, .main)
         let context = Unmanaged.passUnretained(self).toOpaque()
-        let callback: IOServiceMatchingCallback = { context, iterator in
+        let arrived: IOServiceMatchingCallback = { context, iterator in
             guard let context else { return }
-            Unmanaged<UADHardware>.fromOpaque(context).takeUnretainedValue().drain(iterator)
+            Unmanaged<UADHardware>.fromOpaque(context).takeUnretainedValue().adjust(by: drain(iterator))
         }
-        for type in [kIOFirstMatchNotification, kIOTerminatedNotification] {
+        let left: IOServiceMatchingCallback = { context, iterator in
+            guard let context else { return }
+            Unmanaged<UADHardware>.fromOpaque(context).takeUnretainedValue().adjust(by: -drain(iterator))
+        }
+        for (type, callback) in [(kIOFirstMatchNotification, arrived), (kIOTerminatedNotification, left)] {
             var iterator: io_iterator_t = 0
             guard IOServiceAddMatchingNotification(port, type, IOServiceMatching(Self.serviceClass),
                                                    callback, context, &iterator) == KERN_SUCCESS else { continue }
             iterators.append(iterator)
-            // Arms the notification and consumes what is already there.
-            while case let service = IOIteratorNext(iterator), service != 0 { IOObjectRelease(service) }
+            // Draining arms the notification; the first-match iterator starts out
+            // holding the services already there.
+            let existing = drain(iterator)
+            if type == kIOFirstMatchNotification { count += existing }
         }
-        recount()
     }
 
-    private func drain(_ iterator: io_iterator_t) {
-        while case let service = IOIteratorNext(iterator), service != 0 { IOObjectRelease(service) }
-        recount()
-    }
-
-    /// Recounts rather than tracking arrivals and departures, which can come in either order.
-    private func recount() {
-        var iterator: io_iterator_t = 0
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching(Self.serviceClass),
-                                           &iterator) == KERN_SUCCESS else { return }
-        var count = 0
-        while case let service = IOIteratorNext(iterator), service != 0 {
-            count += 1
-            IOObjectRelease(service)
-        }
-        IOObjectRelease(iterator)
-        let present = count > 0
-        guard present != isPresent else { return }
-        isPresent = present
-        onChange?()
+    private func adjust(by delta: Int) {
+        let was = isPresent
+        count = max(0, count + delta)
+        if isPresent != was { onChange?() }
     }
 
     deinit {
         iterators.forEach { IOObjectRelease($0) }
         if let port { IONotificationPortDestroy(port) }
     }
+}
+
+/// Releases every service an IOKit iterator holds and returns how many there were.
+private func drain(_ iterator: io_iterator_t) -> Int {
+    var n = 0
+    while case let service = IOIteratorNext(iterator), service != 0 {
+        n += 1
+        IOObjectRelease(service)
+    }
+    return n
 }

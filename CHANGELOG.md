@@ -11,7 +11,11 @@ and publishes the section as the release notes. Versions follow
 
 ### Added
 
-- A warning when the chain holds UAD-2 plugins but no UAD DSP (Apollo, Satellite or UAD-2 card) is attached, so they pass audio through untouched: the caterpillar turns red, the menu says "⚠ No UAD hardware: N idle", and each such row in Audio Chain says why. Native UADx plugins are not flagged
+- UAD-2 plugins pause themselves when no UAD DSP (Apollo, Satellite or UAD-2 card) is attached, or the moment it is unplugged: they leave the chain before they can fail on the missing DSP, their editors close, and their saved settings are kept. They load again when the device returns. Meanwhile the caterpillar turns red, the menu says "⚠ No UAD hardware: N paused", and each such row in Audio Chain says why. Native UADx plugins are not affected
+
+### Changed
+
+- Removing, bypassing or failing a slot now takes it out of the running chain at once, even while another plugin is still loading (newly loaded plugins still wait for the queue to drain)
 
 ## [1.1.1] - 2026-09-28
 

@@ -56,10 +56,11 @@ pick one on its own when headphones disconnect; choose a real output in Control
 Center, or remove the stale driver from `/Library/Audio/Plug-Ins/HAL`.
 
 UAD-2 plugins (the "UAD …" ones, not native "UADx") run on the DSP in an Apollo,
-Satellite or UAD-2 card. With none attached they load but pass audio through
-untouched, so the caterpillar turns red, the menu says **⚠ No UAD hardware: N idle**,
-and those rows in Audio Chain say why. Connect the device, or use a UADx or other
-native effect instead.
+Satellite or UAD-2 card. With none attached, or the moment one is unplugged,
+SoundChain pauses them: they leave the chain (the rest keeps running), their editors
+close, and their last saved settings are kept. The caterpillar turns red, the menu
+says **⚠ No UAD hardware: N paused**, and those rows in Audio Chain say why.
+Reconnect the device and they load again on their own.
 
 ## Pinned effects
 

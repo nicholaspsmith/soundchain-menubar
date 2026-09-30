@@ -28,7 +28,7 @@ final class UADCheckTests: XCTestCase {
     func testIdleDSPPluginsAreCountedWithoutHardware() {
         let chain = Chain(slots: [slot("UAD UA 1176SE Legacy"), slot("UAD Pultec EQP-1A"), slot("UADx LA-2A")])
         XCTAssertEqual(UADCheck.idleSlots(in: chain, hardwarePresent: false).count, 2)
-        XCTAssertEqual(UADCheck.warning(chain: chain, hardwarePresent: false), "⚠ No UAD hardware: 2 idle")
+        XCTAssertEqual(UADCheck.warning(chain: chain, hardwarePresent: false), "⚠ No UAD hardware: 2 paused")
     }
 
     func testNoWarningWithHardware() {
@@ -46,7 +46,7 @@ final class UADCheckTests: XCTestCase {
 
     func testWarningFitsOnOneMenuLine() {
         let chain = Chain(slots: [slot("UAD UA 1176SE Legacy")])
-        XCTAssertEqual(UADCheck.warning(chain: chain, hardwarePresent: false), "⚠ No UAD hardware: 1 idle")
+        XCTAssertEqual(UADCheck.warning(chain: chain, hardwarePresent: false), "⚠ No UAD hardware: 1 paused")
         let many = Chain(slots: Array(repeating: slot("UAD Pultec EQP-1A"), count: 100))
         XCTAssertLessThanOrEqual(UADCheck.warning(chain: many, hardwarePresent: false)!.count, 34)
     }

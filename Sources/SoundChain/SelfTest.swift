@@ -195,6 +195,40 @@ enum SelfTest {
         recover.sync(to: solo)
         _ = spin { !recover.isLoading }
         check(recover.error(for: soloSlot.id) == nil && recover.activeCount == 1, "Retry clears render errors")
+
+        // A slot whose hardware goes away (a UAD-2 plugin when the Apollo is unplugged)
+        // is suspended: taken out of the chain and released, and loaded again on return.
+        let hardware = ChainRunner()
+        hardware.setFormat(RenderFormat(sampleRate: sampleRate, maxFrames: 4096))
+        var attached = true
+        hardware.isSuspended = { $0.component == eq && !attached }
+        var rig = Chain()
+        let dsp = rig.add(component: eq, name: "AUNBandEQ", manufacturer: "Apple")
+        rig.add(component: delay, name: "AUDelay", manufacturer: "Apple")
+        hardware.sync(to: rig)
+        _ = spin { !hardware.isLoading }
+        check(hardware.activeCount == 2, "a slot with its hardware attached runs")
+        attached = false
+        hardware.sync(to: rig)
+        check(hardware.activeCount == 1 && hardware.plugin(for: dsp.id) == nil,
+              "losing the hardware takes the slot out and releases its plugin at once")
+        check(hardware.error(for: dsp.id) == nil && !hardware.isLoading, "a suspended slot is not an error and is not reloaded")
+        attached = true
+        hardware.sync(to: rig)
+        check(spin { !hardware.isLoading } && hardware.activeCount == 2, "the slot reloads when the hardware returns")
+
+        let midLoad = ChainRunner()
+        midLoad.setFormat(RenderFormat(sampleRate: sampleRate, maxFrames: 4096))
+        var present = true
+        midLoad.isSuspended = { _ in !present }
+        var single = Chain()
+        let pending = single.add(component: eq, name: "AUNBandEQ", manufacturer: "Apple")
+        midLoad.sync(to: single)
+        present = false                                  // hardware lost while it loads
+        midLoad.sync(to: single)
+        _ = spin { !midLoad.isLoading }
+        check(midLoad.plugin(for: pending.id) == nil && midLoad.activeCount == 0,
+              "a plugin whose hardware goes away mid-load is dropped when the load finishes")
     }
 
     // MARK: Helpers (also used by later self-tests)

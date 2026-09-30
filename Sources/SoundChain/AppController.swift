@@ -89,7 +89,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         runner.didStep = { [blame] id, step in blame.end(id, step: step) }
         engine.onFormat = { [weak self] format in self?.runner.setFormat(format) }
         engine.onStateChange = { [weak self] _ in self?.refreshIcon() }
-        uad.onChange = { [weak self] in self?.chainDidChange() }
+        runner.isSuspended = { [uad] slot in !uad.isPresent && UADCheck.needsHardware(slot) }
+        uad.onChange = { [weak self] in self?.uadHardwareChanged() }
         uad.start()
         runner.sync(to: chain)
         startAudio()
@@ -202,6 +203,18 @@ final class AppController: NSObject, NSApplicationDelegate {
             return nil
         }
         return box.data
+    }
+
+    /// An Apollo or UAD-2 card came or went. On loss, the UAD-2 plugins leave the
+    /// chain before anything else touches them: their editors close without reading
+    /// settings (the last saved ones are kept) and the runner releases them. On
+    /// return, `sync` loads them again with those settings.
+    private func uadHardwareChanged() {
+        if !uad.isPresent {
+            for slot in chain.slots where UADCheck.needsHardware(slot) { editors.close(slotID: slot.id) }
+        }
+        runner.sync(to: chain)
+        chainDidChange()
     }
 
     private func chainDidChange() {

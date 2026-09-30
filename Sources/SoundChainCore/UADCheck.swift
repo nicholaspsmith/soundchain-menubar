@@ -6,9 +6,10 @@
 
 import Foundation
 
-/// Spots UAD-2 plugins that cannot be doing anything. They run on the DSP inside an
-/// Apollo or UAD-2 card; with none attached they load fine but pass audio through
-/// untouched. Native UADx plugins (same manufacturer code) run on the Mac.
+/// Spots UAD-2 plugins that cannot run. They need the DSP inside an Apollo or UAD-2
+/// card; with none attached (or once it is unplugged) SoundChain pauses them, taking
+/// them out of the chain until it returns. Native UADx plugins (same manufacturer
+/// code) run on the Mac.
 public enum UADCheck {
     static let manufacturer = ComponentID.code("!UAD")!
 
@@ -16,7 +17,7 @@ public enum UADCheck {
         slot.component.manufacturer == manufacturer && !slot.name.hasPrefix("UADx")
     }
 
-    /// The enabled slots that are passing audio through for want of UAD hardware.
+    /// The enabled slots paused for want of UAD hardware.
     public static func idleSlots(in chain: Chain, hardwarePresent: Bool) -> [ChainSlot] {
         guard !hardwarePresent, !chain.masterBypass else { return [] }
         return chain.slots.filter { !$0.bypassed && needsHardware($0) }
@@ -26,9 +27,9 @@ public enum UADCheck {
     public static func warning(chain: Chain, hardwarePresent: Bool) -> String? {
         let count = idleSlots(in: chain, hardwarePresent: hardwarePresent).count
         guard count > 0 else { return nil }
-        return "⚠ No UAD hardware: \(count) idle"
+        return "⚠ No UAD hardware: \(count) paused"
     }
 
     /// The row detail for one of those slots in the chain window.
-    public static let rowNote = "Needs UAD hardware (Apollo or UAD-2): passing audio through"
+    public static let rowNote = "Paused: needs UAD hardware (Apollo or UAD-2)"
 }

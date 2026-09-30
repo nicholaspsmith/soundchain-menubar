@@ -25,6 +25,11 @@ final class ChainRunner {
     var willStep: (ComponentID, CrashBlame.Step) -> Void = { _, _ in }
     var didStep: (ComponentID, CrashBlame.Step) -> Void = { _, _ in }
     static let disabledMessage = "Disabled: it crashed SoundChain"
+    /// Slots whose hardware is missing (a UAD-2 plugin with no Apollo attached). They
+    /// are not loaded, and a loaded one is released and taken out of the chain at
+    /// once, before it can fail on a DSP that is gone. `sync` loads them again when
+    /// this says false.
+    var isSuspended: (ChainSlot) -> Bool = { _ in false }
 
     private(set) var format: RenderFormat?
     /// Components that failed to load this session, for flagging in the Add picker.
@@ -58,11 +63,13 @@ final class ChainRunner {
         chain = newChain
         let ids = Set(newChain.slots.map(\.id))
         for id in plugins.keys where !ids.contains(id) { plugins[id] = nil }
+        for slot in newChain.slots where isSuspended(slot) { plugins[slot.id] = nil }
         loadErrors = loadErrors.filter { ids.contains($0.key) }
         // A slot the user bypassed gets a fresh start when re-enabled.
         renderErrors = renderErrors.filter { id, _ in newChain.slot(id: id).map { !$0.bypassed } ?? false }
         for slot in newChain.slots
-        where plugins[slot.id] == nil && !loading.contains(slot.id) && loadErrors[slot.id] == nil {
+        where plugins[slot.id] == nil && !loading.contains(slot.id) && loadErrors[slot.id] == nil
+            && !isSuspended(slot) {
             if isDisabled(slot.component) {
                 loadErrors[slot.id] = Self.disabledMessage
                 continue
@@ -160,6 +167,7 @@ final class ChainRunner {
             }
             self.loading.remove(slot.id)
             guard let latest = self.chain.slot(id: slot.id) else { return }   // removed while loading
+            guard !self.isSuspended(latest) else { return }                    // its hardware went away
             switch result {
             case .success(let plugin):
                 if let state = latest.state {
@@ -196,20 +204,23 @@ final class ChainRunner {
         componentFailures[slot.component] = message
     }
 
-    /// Builds and swaps in a new snapshot. While plugins are loading, the swap waits
-    /// until the queue drains: no newly loaded plugin goes live while another is still
-    /// loading, so a crash in one plugin's render is never blamed on the one loading.
+    /// Builds and swaps in a new snapshot. While plugins are loading, only removals
+    /// go out: no newly loaded plugin goes live while another is still loading, so a
+    /// crash in one plugin's render is never blamed on the one loading. The full swap
+    /// waits until the queue drains.
     private func publish() {
         guard let format else { onChange?(); return }
-        if isBusyLoading {
-            publishPending = true
+        let busy = isBusyLoading
+        publishPending = busy
+        let live = Set(current?.slotIDs ?? [])
+        let stages: [(slotID: UUID, unit: AUAudioUnit)] = chain.masterBypass ? [] : chain.slots.compactMap { slot in
+            guard !slot.bypassed, renderErrors[slot.id] == nil, let plugin = plugins[slot.id],
+                  !busy || live.contains(slot.id) else { return nil }
+            return (slotID: slot.id, unit: plugin.unit)
+        }
+        if busy, stages.map(\.slotID) == current?.slotIDs ?? [] {
             onChange?()
             return
-        }
-        publishPending = false
-        let stages: [(slotID: UUID, unit: AUAudioUnit)] = chain.masterBypass ? [] : chain.slots.compactMap { slot in
-            guard !slot.bypassed, renderErrors[slot.id] == nil, let plugin = plugins[slot.id] else { return nil }
-            return (slotID: slot.id, unit: plugin.unit)
         }
         let next = RenderChain(stages: stages, maxFrames: format.maxFrames)
         retire(source.swap(next))
