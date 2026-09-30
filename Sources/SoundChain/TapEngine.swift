@@ -10,8 +10,8 @@ import CoreAudio
 import Foundation
 import SoundChainCore
 
-/// Owns the global process tap, the private aggregate device that pairs it with the
-/// current default output, and the IO proc that runs the chain. Main thread, except
+/// Owns the process tap on the current default output, the private aggregate device
+/// that pairs it with that output, and the IO proc that runs the chain. Main thread, except
 /// `render`, which runs on the audio thread.
 @available(macOS 14.2, *)
 final class TapEngine {
@@ -38,6 +38,7 @@ final class TapEngine {
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var procID: AudioDeviceIOProcID?
     private var outputDevice = AudioObjectID(kAudioObjectUnknown)
+    private var route: StereoRoute?
     private var listeners: [(object: AudioObjectID, address: AudioObjectPropertyAddress,
                              block: AudioObjectPropertyListenerBlock)] = []
     private var wakeObserver: NSObjectProtocol?
@@ -83,8 +84,16 @@ final class TapEngine {
         let deviceName = AudioHW.name(outputDevice)
         let warning = OutputCheck.warning(transportType: AudioHW.transportType(outputDevice))
         let me = try AudioHW.ownProcessObject()
+        guard let route = AudioHW.stereoRoute(outputDevice) else {
+            throw CoreAudioError(what: "Finding the output's channels", status: kAudioHardwareBadStreamError)
+        }
+        self.route = route
 
-        let description = CATapDescription(stereoGlobalTapButExcludeProcesses: [me])
+        // Tap the output stream itself, channel for channel, rather than a stereo
+        // mixdown: a mixdown takes channels 1 and 2 as front left and right and scales
+        // any other pair down, and apps play into the device's preferred pair (5 and 6
+        // on an Apollo). What comes in is exactly what apps sent that stream.
+        let description = CATapDescription(excludingProcesses: [me], deviceUID: outputUID, stream: UInt(route.tapStream))
         description.uuid = UUID()
         description.name = "SoundChain"
         description.isPrivate = true
@@ -98,6 +107,7 @@ final class TapEngine {
             throw CoreAudioError(what: "Using the tap (it is not 32-bit float)", status: kAudioHardwareUnsupportedOperationError)
         }
         let interleaved = tapFormat.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0
+        let tapChannels = Int(tapFormat.mChannelsPerFrame)
 
         let aggregate: [String: Any] = [
             kAudioAggregateDeviceNameKey: "SoundChain",
@@ -123,7 +133,7 @@ final class TapEngine {
         let source = self.source, callbacks = self.callbacks
         try AudioHW.check(AudioDeviceCreateIOProcIDWithBlock(&procID, aggregateID, nil) { _, input, inputTime, output, _ in
             sc_counter_increment(callbacks)
-            TapEngine.render(source: source, interleaved: interleaved,
+            TapEngine.render(source: source, interleaved: interleaved, tapChannels: tapChannels, route: route,
                              input: input, inputTime: inputTime, output: output)
         }, "Installing the audio callback")
         if let procID { Self.useOnlyTapInput(aggregateID, procID) }
@@ -163,6 +173,7 @@ final class TapEngine {
         }
         if tapID != kAudioObjectUnknown { AudioHardwareDestroyProcessTap(tapID) }
         procID = nil
+        route = nil
         aggregateID = AudioObjectID(kAudioObjectUnknown)
         tapID = AudioObjectID(kAudioObjectUnknown)
     }
@@ -171,7 +182,7 @@ final class TapEngine {
 
     /// The IO proc body. No allocation, no locks: the snapshot is used unretained
     /// (it outlives any cycle; see ChainRunner.retireDelay).
-    private static func render(source: SnapshotSource, interleaved: Bool,
+    private static func render(source: SnapshotSource, interleaved: Bool, tapChannels: Int, route: StereoRoute,
                                input: UnsafePointer<AudioBufferList>, inputTime: UnsafePointer<AudioTimeStamp>,
                                output: UnsafeMutablePointer<AudioBufferList>) {
         let out = UnsafeMutableAudioBufferListPointer(output)
@@ -180,12 +191,16 @@ final class TapEngine {
         guard let raw = source.load() else { ChannelMap.zero(out); return }
         Unmanaged<RenderChain>.fromOpaque(raw)._withUnsafeGuaranteedRef { chain in
             let inputList = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))
-            let frames = TapInput.read(inputList, interleaved: interleaved,
+            guard let tap = TapStream(inputList, interleaved: interleaved, channels: tapChannels) else {
+                ChannelMap.zero(out); return
+            }
+            let frames = TapInput.read(tap, leftChannel: route.leftInTap, rightChannel: route.rightInTap,
                                        left: chain.inputLeft, right: chain.inputRight, capacity: chain.maxFrames)
             guard frames > 0 else { ChannelMap.zero(out); return }
             let result = chain.process(frames: frames, timestamp: inputTime)
             SampleGuard.sanitize(left: result.left, right: result.right, frames: frames)
-            ChannelMap.write(left: result.left, right: result.right, frames: frames, to: out)
+            ChannelMap.write(left: result.left, right: result.right, frames: frames, to: out,
+                             route: route, passthrough: tap)
         }
     }
 
@@ -196,14 +211,17 @@ final class TapEngine {
         if outputDevice != kAudioObjectUnknown {
             addListener(outputDevice, kAudioDevicePropertyNominalSampleRate)
             addListener(outputDevice, kAudioDevicePropertyDeviceIsAlive)
+            addListener(outputDevice, kAudioDevicePropertyPreferredChannelsForStereo, kAudioObjectPropertyScopeOutput)
+            addListener(outputDevice, kAudioDevicePropertyStreamConfiguration, kAudioObjectPropertyScopeOutput)
         }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in self?.scheduleRestart(force: true) }
     }
 
-    private func addListener(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) {
-        var address = AudioHW.addr(selector)
+    private func addListener(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector,
+                             _ scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) {
+        var address = AudioHW.addr(selector, scope)
         let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.scheduleRestart(force: false) }
         if AudioObjectAddPropertyListenerBlock(object, &address, DispatchQueue.main, block) == noErr {
             listeners.append((object, address, block))
@@ -239,6 +257,7 @@ final class TapEngine {
     private func needsRestart() -> Bool {
         guard case .running(_, _, let rate, _) = state else { return true }
         guard let current = try? AudioHW.defaultOutputDevice(), current == outputDevice else { return true }
+        if AudioHW.stereoRoute(outputDevice) != route { return true }
         return (try? AudioHW.nominalSampleRate(outputDevice)) != rate
     }
 }

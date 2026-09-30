@@ -70,8 +70,11 @@ pinned. Pins match name prefixes, so "Pro-Q" also covers a later Pro-Q 4.
 
 ## How it works
 
-A global Core Audio process tap captures every app's output except SoundChain's
-own and mutes the originals. The tap and the current default output device are
+A Core Audio process tap on the current output device captures every app's output
+to it, except SoundChain's own, channel for channel, and mutes the originals. The
+chain processes the device's preferred stereo pair (Audio MIDI Setup ▸ Configure
+Speakers; channels 5 and 6 on an Apollo) and writes it back to the same channels;
+any other channel passes through untouched. The tap and the current default output device are
 joined in a private aggregate device; its IO callback runs the effects in order
 and writes to the output. Chain edits build a new immutable render snapshot on
 the main thread and swap it in atomically, so the audio thread never waits. The
