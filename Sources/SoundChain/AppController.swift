@@ -35,6 +35,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var editorsOpening: [UUID: ComponentID] = [:]
     private let runner = ChainRunner()
     private let uad = UADHardware()
+    private let bluetooth = BluetoothReconnect()
     private lazy var engine = TapEngine(source: runner.source)
     private(set) var chain = Chain()
     /// A one-off message for the menu (corrupt chain file, crash-loop bypass, save failure).
@@ -105,6 +106,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         runner.isSuspended = { [uad] slot in !uad.isPresent && UADCheck.needsHardware(slot) }
         uad.onChange = { [weak self] in self?.uadHardwareChanged() }
         uad.start()
+        bluetooth.onFinish = { [weak self] result in
+            self?.notice = result
+            self?.refreshIcon()
+        }
         runner.sync(to: chain)
         startAudio()
         editors.onClose = { [weak self] id in self?.captureState(id) }
@@ -312,6 +317,13 @@ final class AppController: NSObject, NSApplicationDelegate {
         if permissionDenied || engine.state.isFailed {
             menu.addItem(item("Retry", #selector(retry)))
         }
+        if let target = BluetoothReconnect.currentTarget() {
+            let reconnect = item(bluetooth.inProgress ? "Reconnecting \(target.name)…" : "Reconnect \(target.name)",
+                                 #selector(reconnectBluetooth))
+            reconnect.isEnabled = !bluetooth.inProgress
+            reconnect.toolTip = "For when headphones go silent. Saves recent Bluetooth logs to ~/Library/Logs/SoundChain first."
+            menu.addItem(reconnect)
+        }
         menu.addItem(.separator())
 
         let bypass = item("Bypass", #selector(toggleBypass))
@@ -413,6 +425,12 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleLogin() { LoginItem.toggle() }
+
+    @objc private func reconnectBluetooth() {
+        guard let target = BluetoothReconnect.currentTarget() else { return }
+        notice = nil
+        bluetooth.reconnect(target)
+    }
 }
 
 @available(macOS 14.2, *)

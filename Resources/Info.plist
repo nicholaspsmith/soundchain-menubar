@@ -22,6 +22,8 @@
 	<true/>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>SoundChain processes your Mac's audio through the effects you choose, then plays it back.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>SoundChain reconnects your Bluetooth headphones when you ask it to, for when they go silent.</string>
 	<key>StatusItemKitVersion</key>
 	<string>0.1.0</string>
 </dict>
