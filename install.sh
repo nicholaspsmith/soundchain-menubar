@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 scripts/build-app.sh
 mkdir -p "$HOME/Applications"
-# Re-arm the Menubarn release hook (every push is a release) for this clone.
+# Re-arm the Menumon release hook (every push is a release) for this clone.
 RELEASE_KIT="$(cd .. && pwd)/StatusItemKit/scripts/release/adopt.sh"
 if [ -x "$RELEASE_KIT" ]; then
     "$RELEASE_KIT" --hooks-only || echo "Release hook: adopt.sh failed" >&2

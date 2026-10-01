@@ -1,8 +1,8 @@
 # SoundChain
 
-<p align="center"><img src="docs/mascot.png" width="160" alt="SoundChain mascot, from the Menubarn widget library"></p>
+<p align="center"><img src="docs/mascot.png" width="160" alt="SoundChain mascot, from Menumon"></p>
 
-<p align="center">Part of the <a href="https://widgets.nicksmith.software">Menubarn</a> widget library.</p>
+<p align="center">Part of <strong><a href="https://menumon.nicksmith.software">Menumon</a></strong>.</p>
 
 A standalone macOS menu-bar app that runs **one chain of Audio Unit effects over
 all of your Mac's audio**: EQ, room correction, limiting, anything installed as an
@@ -10,7 +10,7 @@ AU effect. Pick effects, open their own editors, and the processed sound plays
 through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit). Part of
-the [Menubarn](https://widgets.nicksmith.software) widget library.
+the [Menumon](https://menumon.nicksmith.software).
 
 **Version 1.0.2** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
