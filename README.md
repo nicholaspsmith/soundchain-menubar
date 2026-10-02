@@ -12,7 +12,7 @@ through whatever output is current.
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit). Part of
 the [Menumon](https://menumon.nicksmith.software).
 
-**Version 1.0.2** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.3.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -47,6 +47,10 @@ The menu-bar icon is a caterpillar in headphones. Each running effect puts a
 highlight on one of its five segments, counting back from the head. Green means
 processing, grey means bypassed, red means something needs attention (the menu
 says what).
+
+Once a minute Carol, the caterpillar, runs on the spot for a second: her feet
+scissor, each one swinging opposite its neighbour, while a bob ripples along
+her body from tail to head. When several Menumon mascots are running they take turns, a second apart: Archimedes (Claude Usage), Menu Pimp (Mac Daddy), Carol (SoundChain), Caveepyan (VPN & DNS), then Armonitor (Monitor Lizard), counting only the ones that are running. Skipped when Reduce Motion is on.
 
 SoundChain follows whatever output macOS picks, including a virtual one such as
 BlackHole, Zoom's, or a driver an uninstalled app left behind. Those have no
