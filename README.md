@@ -52,6 +52,8 @@ Once a minute Carol, the caterpillar, runs on the spot for a second: her feet
 scissor, each one swinging opposite its neighbour, while a bob ripples along
 her body from tail to head. When several Menumon mascots are running they take turns, a second apart: Archimedes (Claude Usage), Menu Pimp (Mac Daddy), Carol (SoundChain), Caveepyan (VPN & DNS), then Armonitor (Monitor Lizard), counting only the ones that are running. Skipped when Reduce Motion is on.
 
+![Carol the caterpillar running on the spot](docs/animation.png)
+
 SoundChain follows whatever output macOS picks, including a virtual one such as
 BlackHole, Zoom's, or a driver an uninstalled app left behind. Those have no
 speakers, so when the current output is virtual the caterpillar turns red and the
