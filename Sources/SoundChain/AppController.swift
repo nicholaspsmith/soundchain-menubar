@@ -12,6 +12,17 @@ import StatusItemKit
 final class AppController: NSObject, NSApplicationDelegate {
     private var controller: StatusItemController!
     private var yieldClient: YieldClient!
+    /// Once a minute, in her turn with the other animated mascots, Carol runs
+    /// on the spot for a second. `runTime` is seconds into the run, nil at rest.
+    private var minuteCue: MinuteCue!
+    private var runTime: TimeInterval?
+    private lazy var runAnimation = IconAnimation(duration: CharacterIcon.caterpillarRunDuration, frame: { [weak self] t in
+        self?.runTime = t
+        self?.refreshIcon()
+    }, completion: { [weak self] in
+        self?.runTime = nil
+        self?.refreshIcon()
+    })
     private let store = ChainStore(url: ChainStore.defaultURL())
     private let crashGuard = CrashGuard(store: UserDefaults.standard)
     private let blame = CrashBlame(directory: ChainStore.defaultURL().deletingLastPathComponent())
@@ -81,6 +92,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         controller.start()
         yieldClient = YieldClient(item: controller)
         yieldClient.start()
+        minuteCue = MinuteCue { [weak self] in self?.runAnimation.start() }
+        minuteCue.start()
 
         installEditMenu()
         runner.onChange = { [weak self] in self?.chainDidChange() }
@@ -256,7 +269,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         case .bypassed: state = .bypassed
         case .error: state = .error
         }
-        controller?.setIcon(CharacterIcon.caterpillar(effects: runner.activeCount, state: state))
+        controller?.setIcon(CharacterIcon.caterpillar(effects: runner.activeCount, state: state, running: runTime))
     }
 
     /// The menu's status block: output device (and a warning if it is virtual), what
