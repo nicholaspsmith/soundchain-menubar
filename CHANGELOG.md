@@ -7,6 +7,12 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.4.0] - 2026-10-02
+
+### Added
+
+- When the current output is Bluetooth headphones, the menu offers "Reconnect <name>", for when they go silent while macOS still shows them as the output. It first saves the last 5 minutes of Bluetooth and audio logs (`bluetoothd`, `coreaudiod`, `audioaccessoryd`) to `~/Library/Logs/SoundChain`, then disconnects and reconnects them. The first use asks for Bluetooth access
+
 ## [1.3.0] - 2026-10-02
 
 - feat: once a minute Carol runs on the spot for a second (scissoring feet, a bob rippling from tail to head), in turn with the other animated Menumon mascots

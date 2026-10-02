@@ -12,7 +12,7 @@ through whatever output is current.
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit). Part of
 the [Menumon](https://menumon.nicksmith.software).
 
-**Version 1.3.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.4.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -67,6 +67,15 @@ SoundChain pauses them: they leave the chain (the rest keeps running), their edi
 close, and their last saved settings are kept. The caterpillar turns red, the menu
 says **⚠ No UAD hardware: N paused**, and those rows in Audio Chain say why.
 Reconnect the device and they load again on their own.
+
+### Silent Bluetooth headphones
+
+Bluetooth headphones sometimes go silent while macOS still lists them as the
+output, and disconnecting and reconnecting them brings the sound back. When the
+current output is Bluetooth, the menu has **Reconnect <name>**, which does exactly
+that. It first saves the last 5 minutes of Bluetooth and audio logs to
+`~/Library/Logs/SoundChain/bluetooth-<name>-<time>.log`, so a recurring cause can
+be tracked down later. The first use asks for Bluetooth access.
 
 ## Pinned effects
 
