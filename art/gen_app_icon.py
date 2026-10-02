@@ -17,7 +17,7 @@ Usage:
   python3 art/gen_app_icon.py              # generate, then build the .icns
   python3 art/gen_app_icon.py --reprocess  # rebuild from art/raw/app-icon.png
 
-The API key is the same one the Menubarn site's mascot pipeline uses:
+The API key is the same one the Menumon site's mascot pipeline uses:
 GOOGLE_GENERATIVE_AI_API_KEY in the environment, or the untracked .env in
 ../widgets.nicksmith.software. It is never printed.
 """
