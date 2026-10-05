@@ -61,7 +61,7 @@ highlights one of her five segments, counting back from the head. Green means
 processing, grey means bypassed, red means something needs attention (the menu
 says what).
 
-Once a minute Carol runs on the spot for a second. When several Menumon
+Now and then Carol runs on the spot for a second. When several Menumon
 mascots are running they take turns, a second apart: Archimedes (Claude
 Usage), Menu Pimp (Mac Daddy), Carol (SoundChain), Iguanamous (VPN & DNS),
 then Armonitor (Monitor Lizard), counting only the ones that are running.
