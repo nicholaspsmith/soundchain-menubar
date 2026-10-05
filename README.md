@@ -4,6 +4,8 @@
 
 <p align="center">Part of <strong><a href="https://menumon.nicksmith.software">Menumon</a></strong>.</p>
 
+<p align="center"><img src="docs/animation.png" alt="Carol the caterpillar running on the spot"></p>
+
 A standalone macOS menu-bar app that runs **one chain of Audio Unit effects over
 all of your Mac's audio**: EQ, room correction, limiting, anything installed as an
 AU effect. Pick effects, open their own editors, and the processed sound plays
@@ -51,8 +53,6 @@ says what).
 Once a minute Carol, the caterpillar, runs on the spot for a second: her feet
 scissor, each one swinging opposite its neighbour, while a bob ripples along
 her body from tail to head. When several Menumon mascots are running they take turns, a second apart: Archimedes (Claude Usage), Menu Pimp (Mac Daddy), Carol (SoundChain), Caveepyan (VPN & DNS), then Armonitor (Monitor Lizard), counting only the ones that are running. Skipped when Reduce Motion is on.
-
-![Carol the caterpillar running on the spot](docs/animation.png)
 
 SoundChain follows whatever output macOS picks, including a virtual one such as
 BlackHole, Zoom's, or a driver an uninstalled app left behind. Those have no
