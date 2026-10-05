@@ -171,11 +171,6 @@ push that reaches `main` fails the release workflow. The one exception is
 `gh pr merge --admin` past a failing check. See
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
-## Why not a SwiftBar plugin?
-
-A shell plugin cannot host Audio Units, run a real-time audio callback, or show a
-plugin's editor window. This needs a native process.
-
 ## License
 
 Copyright (c) 2026 Nicholas Smith. Licensed under the
