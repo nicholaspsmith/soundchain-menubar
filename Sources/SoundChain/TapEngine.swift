@@ -8,7 +8,12 @@ import AppKit
 import CAtomics
 import CoreAudio
 import Foundation
+import os
 import SoundChainCore
+
+/// Engine lifecycle: why it rebuilt, what the device looked like, how long each step took.
+/// Read with `log show --predicate 'subsystem == "com.nicholaspsmith.SoundChain"' --info`.
+let engineLog = Logger(subsystem: "com.nicholaspsmith.SoundChain", category: "engine")
 
 /// Owns the process tap on the current default output, the private aggregate device
 /// that pairs it with that output, and the IO proc that runs the chain. Main thread, except
@@ -59,11 +64,22 @@ final class TapEngine {
     /// Builds everything for the current default output and starts audio. On failure
     /// the state is `.failed` and listeners stay installed, so the next device change retries.
     func start() {
+        engineLog.notice("start: tearing down tap #\(self.tapID) aggregate #\(self.aggregateID)")
         teardown()
         removeListeners()
+        let began = Date()
         do {
             try build()
+            engineLog.notice("start: running after \(Self.ms(since: began), privacy: .public)")
+            logPlayingProcesses("after build")
+            let built = aggregateID
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                guard let self, self.aggregateID == built else { return }
+                engineLog.notice("start +3s: \(self.callbackCount) IO callbacks so far")
+                self.logPlayingProcesses("3s after build")
+            }
         } catch {
+            engineLog.error("start: failed after \(Self.ms(since: began), privacy: .public): \(error.localizedDescription, privacy: .public)")
             teardown()
             state = .failed(error.localizedDescription)
         }
@@ -71,6 +87,7 @@ final class TapEngine {
     }
 
     func stop() {
+        engineLog.notice("stop")
         teardown()
         removeListeners()
         state = .stopped
@@ -79,7 +96,13 @@ final class TapEngine {
     // MARK: Build and teardown
 
     private func build() throws {
+        var step = Date()
+        func stepDone(_ what: String) {
+            engineLog.notice("build: \(what, privacy: .public) (\(Self.ms(since: step), privacy: .public))")
+            step = Date()
+        }
         outputDevice = try AudioHW.defaultOutputDevice()
+        engineLog.notice("build: output \(AudioHW.describe(self.outputDevice), privacy: .public)")
         let outputUID = try AudioHW.uid(outputDevice)
         let deviceName = AudioHW.name(outputDevice)
         let warning = OutputCheck.warning(transportType: AudioHW.transportType(outputDevice))
@@ -88,6 +111,7 @@ final class TapEngine {
             throw CoreAudioError(what: "Finding the output's channels", status: kAudioHardwareBadStreamError)
         }
         self.route = route
+        engineLog.notice("build: own process #\(me), route \(String(describing: route), privacy: .public)")
 
         // Tap the output stream itself, channel for channel, rather than a stereo
         // mixdown: a mixdown takes channels 1 and 2 as front left and right and scales
@@ -99,6 +123,7 @@ final class TapEngine {
         description.isPrivate = true
         description.muteBehavior = .mutedWhenTapped
         try AudioHW.check(AudioHardwareCreateProcessTap(description, &tapID), "Creating the system audio tap")
+        stepDone("created tap #\(tapID) \(description.uuid.uuidString) on stream \(route.tapStream)")
 
         let tapFormat = try AudioHW.tapFormat(tapID)
         guard tapFormat.mFormatID == kAudioFormatLinearPCM,
@@ -124,6 +149,7 @@ final class TapEngine {
         ]
         try AudioHW.check(AudioHardwareCreateAggregateDevice(aggregate as CFDictionary, &aggregateID),
                           "Creating the aggregate device")
+        stepDone("created aggregate #\(aggregateID)")
 
         try? AudioHW.setBufferFrameSize(aggregateID, Self.requestedBufferFrames)
         let frames = Int(try AudioHW.bufferFrameSize(aggregateID))
@@ -138,6 +164,7 @@ final class TapEngine {
         }, "Installing the audio callback")
         if let procID { Self.useOnlyTapInput(aggregateID, procID) }
         try AudioHW.check(AudioDeviceStart(aggregateID, procID), "Starting audio")
+        stepDone("started IO: \(rate) Hz, \(frames) frames, tap \(tapChannels) ch \(interleaved ? "interleaved" : "planar")")
         state = .running(device: deviceName, warning: warning, sampleRate: rate, bufferFrames: frames)
     }
 
@@ -160,10 +187,13 @@ final class TapEngine {
             .bindMemory(to: UInt32.self, capacity: count)
         for i in 0..<count { flags[i] = i == count - 1 ? 1 : 0 }
         let status = AudioObjectSetPropertyData(device, &address, 0, nil, size, raw)
-        NSLog("SoundChain: input streams %d, tap-only usage set: %d", count, status)
+        engineLog.notice("build: input streams \(count), tap-only usage set: \(status)")
     }
 
     private func teardown() {
+        if aggregateID != kAudioObjectUnknown || tapID != kAudioObjectUnknown {
+            engineLog.notice("teardown: aggregate #\(self.aggregateID) tap #\(self.tapID) after \(self.callbackCount) IO callbacks")
+        }
         if aggregateID != kAudioObjectUnknown {
             if let procID {
                 AudioDeviceStop(aggregateID, procID)
@@ -216,13 +246,19 @@ final class TapEngine {
         }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
-        ) { [weak self] _ in self?.scheduleRestart(force: true) }
+        ) { [weak self] _ in
+            engineLog.notice("event: wake")
+            self?.scheduleRestart(force: true)
+        }
     }
 
     private func addListener(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector,
                              _ scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) {
         var address = AudioHW.addr(selector, scope)
-        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.scheduleRestart(force: false) }
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            engineLog.notice("event: '\(AudioHW.fourCC(selector), privacy: .public)' on #\(object)")
+            self?.scheduleRestart(force: false)
+        }
         if AudioObjectAddPropertyListenerBlock(object, &address, DispatchQueue.main, block) == noErr {
             listeners.append((object, address, block))
         }
@@ -250,14 +286,30 @@ final class TapEngine {
             let forced = self.restartForced
             self.restartPending = false
             self.restartForced = false
-            if forced || self.needsRestart() { self.start() }
+            let reason = forced ? "forced" : self.restartReason()
+            engineLog.notice("restart check: \(reason ?? "nothing changed, staying put", privacy: .public)")
+            if reason != nil { self.start() }
         }
     }
 
-    private func needsRestart() -> Bool {
-        guard case .running(_, _, let rate, _) = state else { return true }
-        guard let current = try? AudioHW.defaultOutputDevice(), current == outputDevice else { return true }
-        if AudioHW.stereoRoute(outputDevice) != route { return true }
-        return (try? AudioHW.nominalSampleRate(outputDevice)) != rate
+    /// Why the engine must rebuild, or nil when nothing that matters changed.
+    private func restartReason() -> String? {
+        guard case .running(_, _, let rate, _) = state else { return "not running (\(state))" }
+        let current = try? AudioHW.defaultOutputDevice()
+        guard let current, current == outputDevice else {
+            return "default output #\(outputDevice) -> \(current.map { AudioHW.describe($0) } ?? "none")"
+        }
+        if AudioHW.stereoRoute(outputDevice) != route { return "stereo route changed" }
+        let now = try? AudioHW.nominalSampleRate(outputDevice)
+        return now != rate ? "sample rate \(rate) -> \(now.map { String($0) } ?? "?")" : nil
+    }
+
+    private func logPlayingProcesses(_ when: String) {
+        let processes = AudioHW.playingProcesses()
+        engineLog.notice("processes playing \(when, privacy: .public): \(processes.isEmpty ? "none" : processes.joined(separator: "; "), privacy: .public)")
+    }
+
+    private static func ms(since date: Date) -> String {
+        String(format: "%.0f ms", Date().timeIntervalSince(date) * 1000)
     }
 }

@@ -130,4 +130,49 @@ enum AudioHW {
     static func tapFormat(_ tap: AudioObjectID) throws -> AudioStreamBasicDescription {
         try get(tap, kAudioTapPropertyFormat, initial: AudioStreamBasicDescription(), what: "Reading the tap format")
     }
+
+    // MARK: Diagnostics (logging only)
+
+    /// A UInt32 property as a string, or "?" if it cannot be read.
+    static func flag(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> String {
+        (try? get(object, selector, initial: UInt32(0), what: "")).map(String.init) ?? "?"
+    }
+
+    /// One line describing a device: id, name, UID, transport, alive, running somewhere, rate.
+    static func describe(_ device: AudioObjectID) -> String {
+        let uid = (try? uid(device)) ?? "?"
+        let transport = String(format: "%08x", transportType(device))
+        let rate = (try? nominalSampleRate(device)).map { String($0) } ?? "?"
+        return "#\(device) '\(name(device))' uid=\(uid) transport=\(transport) alive=\(flag(device, kAudioDevicePropertyDeviceIsAlive)) "
+            + "runningSomewhere=\(flag(device, kAudioDevicePropertyDeviceIsRunningSomewhere)) rate=\(rate) "
+            + "streams=\(outputStreamChannels(device)) stereo=\(preferredStereoChannels(device))"
+    }
+
+    /// The processes currently playing audio, with their PID, bundle ID and output devices.
+    static func playingProcesses() -> [String] {
+        var address = addr(kAudioHardwarePropertyProcessObjectList)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size) == noErr, size > 0 else { return [] }
+        var ids = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(system, &address, 0, nil, &size, &ids) == noErr else { return [] }
+        return ids.compactMap { process in
+            guard (try? get(process, kAudioProcessPropertyIsRunningOutput, initial: UInt32(0), what: "")) == 1 else { return nil }
+            let pid = (try? get(process, kAudioProcessPropertyPID, initial: pid_t(0), what: "")) ?? 0
+            let bundle = (try? string(process, kAudioProcessPropertyBundleID, what: "")) ?? "?"
+            var devicesAddress = addr(kAudioProcessPropertyDevices, kAudioObjectPropertyScopeOutput)
+            var devicesSize: UInt32 = 0
+            var devices: [AudioObjectID] = []
+            if AudioObjectGetPropertyDataSize(process, &devicesAddress, 0, nil, &devicesSize) == noErr, devicesSize > 0 {
+                devices = [AudioObjectID](repeating: 0, count: Int(devicesSize) / MemoryLayout<AudioObjectID>.size)
+                if AudioObjectGetPropertyData(process, &devicesAddress, 0, nil, &devicesSize, &devices) != noErr { devices = [] }
+            }
+            return "#\(process) pid=\(pid) \(bundle) devices=\(devices)"
+        }
+    }
+
+    /// A four-char selector code as text, for logs.
+    static func fourCC(_ code: UInt32) -> String {
+        let bytes = [24, 16, 8, 0].map { UInt8(truncatingIfNeeded: code >> $0) }
+        return bytes.allSatisfy { $0 >= 32 && $0 < 127 } ? String(decoding: bytes, as: UTF8.self) : String(code)
+    }
 }
