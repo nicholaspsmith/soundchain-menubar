@@ -7,6 +7,17 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.7.0] - 2026-10-06
+
+- Audio Chain… has a **Duplicate** button (⌘D): it adds a copy of the selected effect, with all its current settings, to the end of the chain
+- ⌘C copies the selected effect and its settings; ⌘V pastes it directly below the selected row (or at the end) and selects it. Each paste is its own independent copy, and a copied effect can still be pasted after closing the window
+- Fix: granting System Audio Recording in System Settings now starts audio within a second, without pressing Retry
+- Fix: when starting audio fails and SoundChain can't tell whether it has permission, the menu now offers Grant System Audio Recording…
+- Fix: a chain file that exists but can't be read is no longer treated as missing and overwritten by the next save
+- Fix: removing an effect while its editor is still opening no longer leaves a stray editor window behind
+- Fix: audio restarts on its own if the output's buffer size changes, instead of possibly going silent
+- Fix: hardening against a misbehaving plugin asking for more audio than it should, and against needless audio restarts after some device notifications
+
 ## [1.6.1] - 2026-10-06
 
 - Ticking a checkbox in the menu no longer closes it: switch effects, Bypass or Start at Login on and off with the menu still open, and the "effects running" line updates as you go

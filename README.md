@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.6.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.7.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -49,6 +49,12 @@ Start at Login is also in **Settings ▸ Start at Login**, or run the installed 
   Pro-Q, Pro-L 2 and Nectar 3 are pinned at the top. Drag rows to reorder, untick
   one to bypass it, **Open** shows its own editor, **–** removes it (and selects the
   next row, so you can keep pressing).
+- **Duplicate** (⌘D) adds a copy of the selected effect to the end of the chain,
+  with its current settings (read from the running plugin, not the last save) and
+  the same on/off state. **⌘C** copies the selected effect; **⌘V** pastes it directly
+  below the selected row (at the end if none is selected) and selects it. Each
+  paste is a new, independent instance, and the copy stays on the clipboard after
+  the window closes. A plugin that ignores restored settings gets its defaults.
 - Below it, the menu lists every effect in the chain, in order, with a tick
   when it's on. Click one to switch it on or off, as its checkbox in Audio
   Chain… does; the menu stays open, so you can switch several in one go.

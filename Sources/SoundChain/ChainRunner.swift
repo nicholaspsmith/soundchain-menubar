@@ -48,6 +48,13 @@ final class ChainRunner {
     /// A publish requested while plugins were loading; done when the queue drains.
     private var publishPending = false
 
+    /// Precondition: no IO proc still reads `source` (in the app the runner lives as
+    /// long as the process; --selftest makes and drops several). Retired snapshots
+    /// are freed with `retired`; the published one is released here.
+    deinit {
+        source.destroy()
+    }
+
     var isLoading: Bool { !loading.isEmpty }
     /// Effects actually running in the published snapshot.
     var activeCount: Int { current?.stageCount ?? 0 }

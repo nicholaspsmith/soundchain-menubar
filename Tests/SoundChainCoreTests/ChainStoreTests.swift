@@ -79,3 +79,51 @@ private extension Chain {
         return copy
     }
 }
+
+final class ChainStoreReadErrorTests: XCTestCase {
+    private var dir: URL!
+    private var url: URL { dir.appendingPathComponent("chain.json") }
+
+    override func setUpWithError() throws {
+        dir = FileManager.default.temporaryDirectory.appendingPathComponent("ChainStoreReadErrorTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    func testAMissingFileIsNotAReadError() {
+        let load = ChainStore(url: url).load()
+        XCTAssertNil(load.readError)
+        XCTAssertFalse(load.mustNotSave)
+    }
+
+    /// A file that exists but cannot be read is not "missing": it is moved aside so
+    /// the next save cannot overwrite it.
+    func testAnUnreadableFileIsMovedAsideNotTreatedAsMissing() throws {
+        try Data("{}".utf8).write(to: url)
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: url.path)
+        let load = ChainStore(url: url).load(now: Date(timeIntervalSince1970: 0))
+        XCTAssertNotNil(load.readError)
+        let backup = try XCTUnwrap(load.corruptBackup)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: backup.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertFalse(load.mustNotSave)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: backup.path)
+    }
+
+    /// When it cannot even be moved, it stays put and the caller is told not to save.
+    func testAnUnreadableFileThatCannotBeMovedMustNotBeSavedOver() throws {
+        try Data("{}".utf8).write(to: url)
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: url.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
+        let load = ChainStore(url: url).load()
+        XCTAssertNotNil(load.readError)
+        XCTAssertNil(load.corruptBackup)
+        XCTAssertTrue(load.mustNotSave)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+}

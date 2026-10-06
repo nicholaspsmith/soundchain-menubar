@@ -55,6 +55,15 @@ final class AppController: NSObject, NSApplicationDelegate {
     private let captureQueue = DispatchQueue(label: "com.nicholaspsmith.SoundChain.capture",
                                              qos: .utility, attributes: .concurrent)
     private var capturesInFlight: Set<UUID> = []
+    /// The last slot copied with ⌘C. It also goes on the general pasteboard (so it
+    /// outlives the window and the app); this copy covers a pasteboard that refused
+    /// the write, and only while nothing else has been copied since.
+    private var copiedSlot: SlotCopy?
+    private var copiedChangeCount: Int?
+    private static let slotPasteboardType = NSPasteboard.PasteboardType(SlotCopy.pasteboardType)
+    /// Set when the chain file exists but could not be read or moved aside: saving
+    /// would overwrite the user's chain, so nothing is saved this session.
+    private var saveBlocked = false
 
     // MARK: Lifecycle
 
@@ -64,6 +73,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         chain = loaded.chain
         if let backup = loaded.corruptBackup {
             notice = "The chain file was unreadable; it was moved to \(backup.lastPathComponent)"
+        } else if loaded.mustNotSave {
+            saveBlocked = true
+            notice = "Couldn't read the chain file, so changes won't be saved: \(loaded.readError ?? "")"
         }
         let blamed = blame.recordLaunch(lastExitUnclean: crashGuard.lastExitWasUnclean)
         func names(_ ids: [ComponentID]) -> String {
@@ -152,6 +164,12 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func tick() {
+        // Permission granted in System Settings while we were refused: start now,
+        // without waiting for Retry.
+        if permissionDenied, PermissionAdvice.shouldStart(denied: true, now: AudioPermission.status()) {
+            notice = nil
+            startAudio()
+        }
         runner.tick()
         // A step that never finished (a plugin that never answered) must not be blamed
         // for some later, unrelated crash.
@@ -208,6 +226,53 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Calls `done` on the main thread with a slot's current settings: read from its
+    /// running plugin (and stored, so the original's saved settings are fresh too),
+    /// or its saved settings when it is not loaded or does not answer within
+    /// `quitCaptureTimeout`. Duplicate and Copy use this, because the saved state
+    /// can be up to `editorCaptureInterval` old while an editor is open.
+    private func withLiveState(of id: UUID, _ done: @escaping (Data?) -> Void) {
+        guard let plugin = runner.plugin(for: id) else { done(chain.slot(id: id)?.state); return }
+        guard plugin.isOutOfProcess else {
+            if let data = plugin.captureState(), chain.setState(data, id: id) { save() }
+            done(chain.slot(id: id)?.state)
+            return
+        }
+        var finished = false
+        let finish = { [weak self] (data: Data?) in
+            guard !finished, let self else { return }
+            finished = true
+            if let data, self.chain.setState(data, id: id) { self.save() }
+            done(data ?? self.chain.slot(id: id)?.state)
+        }
+        captureQueue.async {
+            let data = plugin.captureState()
+            DispatchQueue.main.async { finish(data) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.quitCaptureTimeout) { finish(nil) }
+    }
+
+    private func copySlot(_ copy: SlotCopy) {
+        copiedSlot = copy
+        let board = NSPasteboard.general
+        board.clearContents()
+        board.setData(copy.encoded(), forType: Self.slotPasteboardType)
+        copiedChangeCount = board.changeCount
+    }
+
+    /// Checks the pasteboard's types only (reading its data is for an actual paste).
+    private var hasSlotToPaste: Bool {
+        let board = NSPasteboard.general
+        if board.types?.contains(Self.slotPasteboardType) == true { return true }
+        return copiedSlot != nil && board.changeCount == copiedChangeCount
+    }
+
+    private func slotToPaste() -> SlotCopy? {
+        let board = NSPasteboard.general
+        if let data = board.data(forType: Self.slotPasteboardType), let copy = SlotCopy(encoded: data) { return copy }
+        return board.changeCount == copiedChangeCount ? copiedSlot : nil
+    }
+
     /// For quitting: waits up to `quitCaptureTimeout` for a plugin's settings.
     private func captureStateBlocking(_ id: UUID) -> Data? {
         guard let plugin = runner.plugin(for: id) else { return nil }
@@ -243,6 +308,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func save() {
+        guard !saveBlocked else { return }
         do {
             try store.save(chain)
         } catch {
@@ -315,7 +381,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         let chainItem = item("Audio Chain…", #selector(editChain), key: "c")
         chainItem.keyEquivalentModifierMask = [.control]
         menu.addItem(chainItem)
-        if permissionDenied {
+        if PermissionAdvice.offersGrant(denied: permissionDenied, tapFailed: engine.state.isFailed,
+                                        status: AudioPermission.status()) {
             menu.addItem(item("Grant System Audio Recording…", #selector(grantPermission)))
         }
         if permissionDenied || engine.state.isFailed {
@@ -382,7 +449,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     /// A menu-bar app has no menu bar of its own, so nothing routes ⌘A/⌘C/⌘V/⌘X/⌘Z to
-    /// text fields (the Add picker's search). An invisible main menu with the
+    /// text fields (the Add picker's search), or ⌘C/⌘V/⌘D to the chain window's rows. An invisible main menu with the
     /// standard Edit items restores them while SoundChain's windows are active.
     private func installEditMenu() {
         let edit = NSMenu(title: "Edit")
@@ -393,6 +460,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         edit.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
         edit.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
         edit.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+        // The chain window's Duplicate (its copy:/paste: are the Copy and Paste above).
+        edit.addItem(NSMenuItem(title: "Duplicate", action: #selector(ChainWindowController.duplicateSlot(_:)),
+                                keyEquivalent: "d"))
         let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         editItem.submenu = edit
         let main = NSMenu()
@@ -431,11 +501,33 @@ final class AppController: NSObject, NSApplicationDelegate {
         window.onMove = { [unowned self] from, to in self.mutate { $0.move(from: from, insertionIndex: to) } }
         window.onRemove = { [unowned self] id in
             self.editors.close(slotID: id)
+            // An editor still being built for it never appears; stop blaming it.
+            if let component = self.editorsOpening.removeValue(forKey: id) { self.blame.end(component, step: .editor) }
             self.mutate { $0.remove(id: id) }
         }
         window.onAdd = { [unowned self] entry in
             self.mutate { $0.add(component: entry.component, name: entry.name, manufacturer: entry.manufacturer) }
         }
+        window.onDuplicate = { [unowned self] id, done in
+            self.withLiveState(of: id) { state in
+                var added: ChainSlot?
+                self.mutate { added = $0.duplicate(id: id, liveState: state) }
+                done(added?.id)
+            }
+        }
+        window.onCopy = { [unowned self] id in
+            self.withLiveState(of: id) { state in
+                guard let slot = self.chain.slot(id: id) else { return }
+                self.copySlot(SlotCopy(slot, liveState: state))
+            }
+        }
+        window.onPaste = { [unowned self] below in
+            guard let copy = self.slotToPaste() else { return nil }
+            var added: ChainSlot?
+            self.mutate { added = $0.insert(copy, below: below) }
+            return added?.id
+        }
+        window.canPaste = { [unowned self] in self.hasSlotToPaste }
         window.canOpen = true
         window.onOpen = { [unowned self] id in self.openEditor(id) }
         return window

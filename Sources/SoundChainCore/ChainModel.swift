@@ -111,3 +111,73 @@ public struct Chain: Codable, Equatable, Sendable {
         return true
     }
 }
+
+/// A copied slot: everything that makes an effect except its identity, so each
+/// paste or duplicate becomes a new, independent instance. This is what ⌘C puts
+/// on the pasteboard (as JSON, under `pasteboardType`).
+public struct SlotCopy: Codable, Equatable, Sendable {
+    public static let pasteboardType = "com.nicholaspsmith.SoundChain.slot"
+    public static let currentVersion = 1
+
+    public var version: Int
+    public var component: ComponentID
+    public var name: String
+    public var manufacturer: String
+    public var bypassed: Bool
+    /// The plugin's `fullState`, as a binary property list.
+    public var state: Data?
+
+    /// Copies `slot`. `liveState` is the running plugin's current settings; when
+    /// nil (not loaded, or it did not answer) the slot's saved settings are used.
+    public init(_ slot: ChainSlot, liveState: Data? = nil) {
+        version = Self.currentVersion
+        component = slot.component
+        name = slot.name
+        manufacturer = slot.manufacturer
+        bypassed = slot.bypassed
+        state = liveState ?? slot.state
+    }
+
+    /// A new slot (fresh id) with these settings.
+    public func makeSlot() -> ChainSlot {
+        ChainSlot(component: component, name: name, manufacturer: manufacturer, bypassed: bypassed, state: state)
+    }
+
+    public func encoded() -> Data {
+        // Encoding plain values and Data cannot fail.
+        (try? JSONEncoder().encode(self)) ?? Data()
+    }
+
+    /// Nil for anything that is not a copy this version of SoundChain can read.
+    public init?(encoded data: Data) {
+        guard let copy = try? JSONDecoder().decode(SlotCopy.self, from: data),
+              copy.version <= Self.currentVersion else { return nil }
+        self = copy
+    }
+}
+
+extension Chain {
+    /// Appends a copy of slot `id` to the end of the chain. `liveState` is the
+    /// running plugin's current settings (the saved ones are used when nil).
+    /// Returns the new slot, or nil if `id` is not in the chain.
+    @discardableResult
+    public mutating func duplicate(id: UUID, liveState: Data? = nil) -> ChainSlot? {
+        guard let slot = slot(id: id) else { return nil }
+        let copy = SlotCopy(slot, liveState: liveState).makeSlot()
+        slots.append(copy)
+        return copy
+    }
+
+    /// Inserts `copy` as a new slot directly below slot `id`, or at the end when
+    /// `id` is nil or not in the chain. Returns the new slot.
+    @discardableResult
+    public mutating func insert(_ copy: SlotCopy, below id: UUID?) -> ChainSlot {
+        let slot = copy.makeSlot()
+        if let id, let i = slots.firstIndex(where: { $0.id == id }) {
+            slots.insert(slot, at: i + 1)
+        } else {
+            slots.append(slot)
+        }
+        return slot
+    }
+}
