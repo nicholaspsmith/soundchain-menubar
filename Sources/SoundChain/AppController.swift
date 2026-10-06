@@ -11,6 +11,8 @@ import StatusItemKit
 @available(macOS 14.2, *)
 final class AppController: NSObject, NSApplicationDelegate {
     private var controller: StatusItemController!
+    /// The status block of the menu last built, refreshed in place while it is open.
+    private var statusRows: [NSMenuItem] = []
     private var yieldClient: YieldClient!
     /// Once a minute, in her turn with the other animated mascots, Carol runs
     /// on the spot for a second. `runTime` is seconds into the run, nil at rest.
@@ -275,6 +277,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         case .error: state = .error
         }
         controller?.setIcon(CharacterIcon.caterpillar(effects: runner.activeCount, state: state, running: runTime))
+        refreshStatusRows()
     }
 
     /// The menu's status block: output device (and a warning if it is virtual), what
@@ -302,7 +305,8 @@ final class AppController: NSObject, NSApplicationDelegate {
     // MARK: Menu
 
     private func buildMenu(_ menu: NSMenu) {
-        statusLines.forEach { menu.addItem(disabled($0)) }
+        statusRows = statusLines.map(disabled)
+        statusRows.forEach(menu.addItem)
         if let notice { menu.addItem(disabled(notice)) }
         for error in slotErrors { menu.addItem(disabled(error)) }
         if let uadWarning { menu.addItem(disabled(uadWarning)) }
@@ -327,23 +331,24 @@ final class AppController: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         // The chain itself, in order: a tick means the effect is on. Clicking
-        // one switches it on or off, as its checkbox in Audio Chain… does.
+        // one switches it on or off, as its checkbox in Audio Chain… does, and
+        // the menu stays open so several can be switched in one go.
         if chain.slots.isEmpty {
             menu.addItem(disabled("No effects in the chain"))
         } else {
             for slot in chain.slots {
-                let row = item(slot.name, #selector(toggleSlot(_:)))
-                row.state = slot.bypassed ? .off : .on
-                row.representedObject = slot.id
-                row.toolTip = slot.manufacturer
-                menu.addItem(row)
+                let id = slot.id
+                menu.addItem(ToggleMenuItem.make(title: slot.name, isOn: !slot.bypassed,
+                                                 toolTip: slot.manufacturer) { [weak self] on in
+                    self?.setSlot(id, on: on)
+                })
             }
         }
         menu.addItem(.separator())
 
-        let bypass = item("Bypass", #selector(toggleBypass))
-        bypass.state = chain.masterBypass ? .on : .off
-        menu.addItem(bypass)
+        menu.addItem(ToggleMenuItem.make(title: "Bypass", isOn: chain.masterBypass) { [weak self] on in
+            self?.setBypass(on)
+        })
         // Settings ▸ holds only the shared rows (Start at Login, Version):
         // everything SoundChain itself offers is a control used day to day.
         SettingsMenu.addFooter(to: menu, appName: "SoundChain")
@@ -356,11 +361,24 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func disabled(_ title: String) -> NSMenuItem {
-        let short = title.count > Self.menuLineLimit ? String(title.prefix(Self.menuLineLimit - 1)) + "…" : title
-        let item = NSMenuItem(title: short, action: nil, keyEquivalent: "")
+        let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         item.isEnabled = false
-        if short != title { item.toolTip = title }
+        setLine(item, title)
         return item
+    }
+
+    private func setLine(_ item: NSMenuItem, _ title: String) {
+        let short = title.count > Self.menuLineLimit ? String(title.prefix(Self.menuLineLimit - 1)) + "…" : title
+        item.title = short
+        item.toolTip = short != title ? title : nil
+    }
+
+    /// Brings the open menu's status block ("2 effects running", "Bypassed")
+    /// up to date after a tick, since ticking no longer closes the menu.
+    private func refreshStatusRows() {
+        let lines = statusLines
+        guard lines.count == statusRows.count else { return }
+        zip(statusRows, lines).forEach { setLine($0, $1) }
     }
 
     /// A menu-bar app has no menu bar of its own, so nothing routes ⌘A/⌘C/⌘V/⌘X/⌘Z to
@@ -423,15 +441,19 @@ final class AppController: NSObject, NSApplicationDelegate {
         return window
     }
 
-    @objc private func toggleSlot(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? UUID,
-              let slot = chain.slots.first(where: { $0.id == id }) else { return }
-        mutate { $0.setBypassed(!slot.bypassed, id: id) }
+    private func setSlot(_ id: UUID, on: Bool) {
+        guard chain.slots.contains(where: { $0.id == id }) else { return }
+        mutate { $0.setBypassed(!on, id: id) }
+        chainWindow?.reload()
+        refreshIcon()
+        refreshStatusRows()
     }
 
-        @objc private func toggleBypass() {
+    private func setBypass(_ on: Bool) {
         notice = nil
-        mutate { $0.masterBypass.toggle() }
+        mutate { $0.masterBypass = on }
+        refreshIcon()
+        refreshStatusRows()
     }
 
     @objc private func grantPermission() { AudioPermission.openSettings() }

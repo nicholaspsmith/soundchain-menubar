@@ -51,8 +51,9 @@ Start at Login is also in **Settings ▸ Start at Login**, or run the installed 
   next row, so you can keep pressing).
 - Below it, the menu lists every effect in the chain, in order, with a tick
   when it's on. Click one to switch it on or off, as its checkbox in Audio
-  Chain… does.
-- **Bypass** turns all processing off; audio passes through untouched.
+  Chain… does; the menu stays open, so you can switch several in one go.
+- **Bypass** turns all processing off; audio passes through untouched. Ticking
+  it (or an effect) updates the status line at the top in place.
 - **Settings ▸** holds Start at Login and the running version (StatusItemKit's
   shared `SettingsMenu`); **Quit SoundChain** (⌘Q) is below it.
 - Settings save to `~/Library/Application Support/SoundChain/chain.json`, including
