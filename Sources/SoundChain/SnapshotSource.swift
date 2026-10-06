@@ -30,6 +30,15 @@ struct SnapshotSource {
     @inline(__always)
     func load() -> UnsafeMutableRawPointer? { sc_atomic_ptr_load(cell) }
 
+    /// Main thread: releases the published snapshot and frees the cell and counters.
+    /// Only once no IO proc can read them (the source is gone for good afterwards).
+    func destroy() {
+        _ = swap(nil)
+        sc_atomic_ptr_destroy(cell)
+        sc_counter_destroy(begun)
+        sc_counter_destroy(finished)
+    }
+
     /// Main thread: publishes `chain` and hands back the previous snapshot (with
     /// ownership). The caller must keep the old one alive until the audio thread
     /// can no longer be using it (ChainRunner.retireDelay).

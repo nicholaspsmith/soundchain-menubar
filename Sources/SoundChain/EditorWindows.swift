@@ -20,7 +20,8 @@ final class EditorWindows: NSObject, NSWindowDelegate {
     var onPresented: (UUID) -> Void = { _ in }
 
     private var panels: [UUID: NSPanel] = [:]
-    private var pending: Set<UUID> = []
+    /// Editors being built: slot → the request building it.
+    private var pending: [UUID: UUID] = [:]
 
     func hasPanel(_ slotID: UUID) -> Bool { panels[slotID] != nil }
 
@@ -33,18 +34,28 @@ final class EditorWindows: NSObject, NSWindowDelegate {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        guard pending.insert(slotID).inserted else { return }
+        guard pending[slotID] == nil else { return }
+        let request = UUID()
+        pending[slotID] = request
         unit.requestViewController { [weak self] controller in
             DispatchQueue.main.async {
-                guard let self else { return }
-                self.pending.remove(slotID)
+                // Not pending any more: the slot was closed (removed) while its view
+                // was being built, so there is nothing to show it for.
+                guard let self, self.pending[slotID] == request else { return }
+                self.pending[slotID] = nil
                 self.present(slotID: slotID, title: title, controller: controller ?? Self.genericView(for: unit))
             }
         }
     }
 
-    /// Destroys a slot's panel for good (the slot was removed).
+    /// Retitles a slot's editor (its effect was renamed). One still being built
+    /// keeps the title it was asked for; it is set again next time it opens.
+    func setTitle(_ title: String, slotID: UUID) { panels[slotID]?.title = title }
+
+    /// Destroys a slot's panel for good (the slot was removed), and drops an editor
+    /// still being built for it, so it never appears.
     func close(slotID: UUID) {
+        pending[slotID] = nil
         guard let panel = panels.removeValue(forKey: slotID) else { return }
         panel.orderOut(nil)
         panel.contentViewController = nil

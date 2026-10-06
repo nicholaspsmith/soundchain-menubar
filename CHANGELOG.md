@@ -13,6 +13,42 @@ and publishes the section as the release notes. Versions follow
 
 - Engine rebuilds are logged (subsystem `com.nicholaspsmith.SoundChain`, category `engine`): the trigger, the output device's state, the tap and aggregate made, per-step timings, IO callbacks 3 s later, and which apps were playing to which devices. For tracking down doubled audio after an Apollo dropped out and was restarted
 
+## [1.8.0] - 2026-10-06
+
+- Give effects names of your own: in Audio Chain…, click the name column next to an effect (it says "Add a name" until you do), type a name such as "Pitch Down", and press Return. Escape cancels, and an empty name goes back to the plugin's own
+- **Rename** button in Audio Chain… (also Return or ⌘R on the selected effect)
+- The menu lists each effect by its custom name when it has one (hover for the plugin and maker), and editor windows and error lines use it too, e.g. "Pitch Down — AUPitch"
+- Duplicate and ⌘C/⌘V keep the custom name on the copy
+
+## [1.7.0] - 2026-10-06
+
+- Audio Chain… has a **Duplicate** button (⌘D): it adds a copy of the selected effect, with all its current settings, to the end of the chain
+- ⌘C copies the selected effect and its settings; ⌘V pastes it directly below the selected row (or at the end) and selects it. Each paste is its own independent copy, and a copied effect can still be pasted after closing the window
+- Fix: granting System Audio Recording in System Settings now starts audio within a second, without pressing Retry
+- Fix: when starting audio fails and SoundChain can't tell whether it has permission, the menu now offers Grant System Audio Recording…
+- Fix: a chain file that exists but can't be read is no longer treated as missing and overwritten by the next save
+- Fix: removing an effect while its editor is still opening no longer leaves a stray editor window behind
+- Fix: audio restarts on its own if the output's buffer size changes, instead of possibly going silent
+- Fix: hardening against a misbehaving plugin asking for more audio than it should, and against needless audio restarts after some device notifications
+
+## [1.6.1] - 2026-10-06
+
+- Ticking a checkbox in the menu no longer closes it: switch effects, Bypass or Start at Login on and off with the menu still open, and the "effects running" line updates as you go
+
+## [1.6.0] - 2026-10-06
+
+- feat: the menu lists every effect in the chain, ticked when it's on; click one to switch it on or off
+
+## [1.5.1] - 2026-10-05
+
+- New app icon: Carol as she looks in the menu bar
+
+## [1.5.0] - 2026-10-05
+
+### Changed
+
+- The menu ends with a **Settings** submenu, the same one every Menumon app now has: Start at Login and the version moved there. Audio Chain…, Reconnect and Bypass stay at the top
+
 ## [1.4.0] - 2026-10-02
 
 ### Added

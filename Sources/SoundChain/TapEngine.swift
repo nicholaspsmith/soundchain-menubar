@@ -49,6 +49,11 @@ final class TapEngine {
     private var wakeObserver: NSObjectProtocol?
     private var restartPending = false
     private var restartForced = false
+    /// Compared in `restartReason`, like with like: the output device's own nominal
+    /// rate and the aggregate's buffer size (what the IO proc is called with), as
+    /// they were when the engine was built.
+    private var builtOutputRate: Double?
+    private var builtBufferFrames: UInt32?
 
     init(source: SnapshotSource) { self.source = source }
 
@@ -152,8 +157,11 @@ final class TapEngine {
         stepDone("created aggregate #\(aggregateID)")
 
         try? AudioHW.setBufferFrameSize(aggregateID, Self.requestedBufferFrames)
-        let frames = Int(try AudioHW.bufferFrameSize(aggregateID))
+        let bufferFrames = try AudioHW.bufferFrameSize(aggregateID)
+        let frames = Int(bufferFrames)
         let rate = try AudioHW.nominalSampleRate(aggregateID)
+        builtBufferFrames = bufferFrames
+        builtOutputRate = try? AudioHW.nominalSampleRate(outputDevice)
         onFormat?(RenderFormat(sampleRate: rate, maxFrames: max(Self.minimumMaxFrames, frames)))
 
         let source = self.source, callbacks = self.callbacks
@@ -204,6 +212,8 @@ final class TapEngine {
         if tapID != kAudioObjectUnknown { AudioHardwareDestroyProcessTap(tapID) }
         procID = nil
         route = nil
+        builtOutputRate = nil
+        builtBufferFrames = nil
         aggregateID = AudioObjectID(kAudioObjectUnknown)
         tapID = AudioObjectID(kAudioObjectUnknown)
     }
@@ -243,6 +253,11 @@ final class TapEngine {
             addListener(outputDevice, kAudioDevicePropertyDeviceIsAlive)
             addListener(outputDevice, kAudioDevicePropertyPreferredChannelsForStereo, kAudioObjectPropertyScopeOutput)
             addListener(outputDevice, kAudioDevicePropertyStreamConfiguration, kAudioObjectPropertyScopeOutput)
+            addListener(outputDevice, kAudioDevicePropertyBufferFrameSize)
+        }
+        if aggregateID != kAudioObjectUnknown {
+            // A buffer bigger than the chain was prepared for would render silence.
+            addListener(aggregateID, kAudioDevicePropertyBufferFrameSize)
         }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
@@ -294,14 +309,20 @@ final class TapEngine {
 
     /// Why the engine must rebuild, or nil when nothing that matters changed.
     private func restartReason() -> String? {
-        guard case .running(_, _, let rate, _) = state else { return "not running (\(state))" }
+        guard case .running = state else { return "not running (\(state))" }
         let current = try? AudioHW.defaultOutputDevice()
         guard let current, current == outputDevice else {
             return "default output #\(outputDevice) -> \(current.map { AudioHW.describe($0) } ?? "none")"
         }
         if AudioHW.stereoRoute(outputDevice) != route { return "stereo route changed" }
-        let now = try? AudioHW.nominalSampleRate(outputDevice)
-        return now != rate ? "sample rate \(rate) -> \(now.map { String($0) } ?? "?")" : nil
+        let rate = try? AudioHW.nominalSampleRate(outputDevice)
+        if rate != builtOutputRate {
+            return "sample rate \(builtOutputRate.map { String($0) } ?? "?") -> \(rate.map { String($0) } ?? "?")"
+        }
+        let frames = try? AudioHW.bufferFrameSize(aggregateID)
+        return frames != builtBufferFrames
+            ? "buffer size \(builtBufferFrames.map { String($0) } ?? "?") -> \(frames.map { String($0) } ?? "?") frames"
+            : nil
     }
 
     private func logPlayingProcesses(_ when: String) {

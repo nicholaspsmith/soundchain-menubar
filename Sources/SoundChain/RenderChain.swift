@@ -28,7 +28,8 @@ final class RenderChain {
     private let source: UnsafeMutablePointer<Int>                      // pair the pull block reads
     private let outList: UnsafeMutableAudioBufferListPointer
     private let failed: OpaquePointer                                  // sc_flags, one per stage
-    private let pull: AURenderPullInputBlock
+    /// What each plugin calls for its input. Internal for --selftest.
+    let pull: AURenderPullInputBlock
 
     init(stages: [(slotID: UUID, unit: AUAudioUnit)], maxFrames: Int) {
         let buffers = UnsafeMutablePointer<UnsafeMutablePointer<Float>>.allocate(capacity: 4)
@@ -50,8 +51,11 @@ final class RenderChain {
         outList = AudioBufferList.allocate(maximumBuffers: 2)
         failed = sc_flags_create(Int32(stages.count))
 
-        // Captures only raw pointers, so calling it on the audio thread touches no refcounts.
+        // Captures only raw pointers and an Int, so calling it on the audio thread
+        // touches no refcounts. A plugin asking for more than `maxFrames` would read
+        // past the buffers; it gets an error instead.
         pull = { _, _, frameCount, _, ioData in
+            guard Int(frameCount) <= maxFrames else { return kAudioUnitErr_TooManyFramesToProcess }
             let list = UnsafeMutableAudioBufferListPointer(ioData)
             let byteCount = Int(frameCount) * MemoryLayout<Float>.size
             let base = source.pointee * 2

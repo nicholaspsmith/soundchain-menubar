@@ -1,34 +1,47 @@
 # SoundChain
 
-<p align="center"><img src="docs/mascot.png" width="160" alt="SoundChain mascot, from Menumon"></p>
+<p align="center"><img src="docs/mascot.png" width="160" alt="Carol, SoundChain's menu-bar character, on its app icon"></p>
 
 <p align="center">Part of <strong><a href="https://menumon.nicksmith.software">Menumon</a></strong>.</p>
+
+<p align="center"><img src="docs/animation.png" alt="Carol the caterpillar running on the spot"></p>
 
 A standalone macOS menu-bar app that runs **one chain of Audio Unit effects over
 all of your Mac's audio**: EQ, room correction, limiting, anything installed as an
 AU effect. Pick effects, open their own editors, and the processed sound plays
 through whatever output is current.
 
-Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit). Part of
-the [Menumon](https://menumon.nicksmith.software).
+Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.4.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.8.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
 ## Requirements
 
 - macOS 14.2 or later (Core Audio process taps).
+- Xcode Command Line Tools, and
+  [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit) cloned
+  **beside** this repo (the package depends on `../StatusItemKit`).
 - Audio Unit effects (AUv2 or AUv3). VST3 is not supported.
 
 ## Install
 
-    ./install.sh
+```sh
+cd ~/Code
+git clone https://github.com/nicholaspsmith/StatusItemKit.git
+git clone https://github.com/nicholaspsmith/soundchain-menubar.git
+cd soundchain-menubar && ./install.sh
+```
 
-Builds `build/SoundChain.app` (via StatusItemKit's `make-app.sh`) and symlinks it
-into `~/Applications`, asks whether to turn on Start at Login, then (re)launches the
-app. On first launch, allow **System Audio Recording** when asked.
-Start at Login is also in the menu, or run `SoundChain --login on`.
+`install.sh` builds `build/SoundChain.app` (via StatusItemKit's
+`make-app.sh`), symlinks it into `~/Applications`, asks whether to turn on
+Start at Login, then (re)launches the app. On first launch, allow **System
+Audio Recording** when asked.
+
+Start at Login is also in **Settings ▸ Start at Login**, or run the installed binary:
+`"$HOME/Applications/SoundChain.app/Contents/MacOS/SoundChain" --login on`
+(or `off`, `status`).
 
 ## Use
 
@@ -36,23 +49,43 @@ Start at Login is also in the menu, or run `SoundChain --login on`.
   Pro-Q, Pro-L 2 and Nectar 3 are pinned at the top. Drag rows to reorder, untick
   one to bypass it, **Open** shows its own editor, **–** removes it (and selects the
   next row, so you can keep pressing).
-- **Bypass** turns all processing off; audio passes through untouched.
+- **Duplicate** (⌘D) adds a copy of the selected effect to the end of the chain,
+  with its current settings (read from the running plugin, not the last save) and
+  the same on/off state. **⌘C** copies the selected effect; **⌘V** pastes it directly
+  below the selected row (at the end if none is selected) and selects it. Each
+  paste is a new, independent instance, and the copy stays on the clipboard after
+  the window closes. A plugin that ignores restored settings gets its defaults.
+- **Names**: each row has a column for a name of your own, so two AUPitch rows
+  can read "Pitch Up" and "Pitch Down". Click it (it says "Add a name" until you
+  do), or select a row and press **Rename**, Return or **⌘R**, then type and press
+  Return; clicking away also saves, Escape cancels, and an empty name goes back to
+  the plugin's own. The menu, editor window titles ("Pitch Down — AUPitch") and
+  error lines use the custom name, and Duplicate and ⌘C/⌘V keep it.
+- Below it, the menu lists every effect in the chain, in order (by its custom
+  name when it has one), with a tick when it's on. Click one to switch it on or
+  off, as its checkbox in Audio Chain… does; the menu stays open, so you can switch several in one go.
+- **Bypass** turns all processing off; audio passes through untouched. Ticking
+  it (or an effect) updates the status line at the top in place.
+- **Settings ▸** holds Start at Login and the running version (StatusItemKit's
+  shared `SettingsMenu`); **Quit SoundChain** (⌘Q) is below it.
 - Settings save to `~/Library/Application Support/SoundChain/chain.json`, including
   each plugin's own state (captured when its editor closes, every 5 s while one is
   open, and at quit).
 
 ### The caterpillar
 
-The menu-bar icon is a caterpillar in headphones. Each running effect puts a
-highlight on one of its five segments, counting back from the head. Green means
+The menu-bar icon is Carol, a caterpillar in headphones. Each running effect
+highlights one of her five segments, counting back from the head. Green means
 processing, grey means bypassed, red means something needs attention (the menu
 says what).
 
-Once a minute Carol, the caterpillar, runs on the spot for a second: her feet
-scissor, each one swinging opposite its neighbour, while a bob ripples along
-her body from tail to head. When several Menumon mascots are running they take turns, a second apart: Archimedes (Claude Usage), Menu Pimp (Mac Daddy), Carol (SoundChain), Caveepyan (VPN & DNS), then Armonitor (Monitor Lizard), counting only the ones that are running. Skipped when Reduce Motion is on.
+Now and then Carol runs on the spot for a second. When several Menumon
+mascots are running they take turns, a second apart: Archimedes (Claude
+Usage), Menu Pimp (Mac Daddy), Carol (SoundChain), Iguanamous (VPN & DNS),
+then Armonitor (Monitor Lizard), counting only the ones that are running.
+Skipped when Reduce Motion is on.
 
-![Carol the caterpillar running on the spot](docs/animation.png)
+### Virtual outputs and UAD plugins
 
 SoundChain follows whatever output macOS picks, including a virtual one such as
 BlackHole, Zoom's, or a driver an uninstalled app left behind. Those have no
@@ -81,7 +114,7 @@ be tracked down later. The first use asks for Bluetooth access.
 
 Click the pin beside any effect in **Add…** (or right-click ▸ Pin) to keep it in the
 **Pinned** group at the top; click again to unpin. Pro-Q, Pro-L 2 and Nectar 3 start
-pinned. Pins match name prefixes, so "Pro-Q" also covers a later Pro-Q 4.
+pinned. Pins match name prefixes, so "Pro-Q" covers Pro-Q 3 and Pro-Q 4.
 
 ## How it works
 
@@ -134,7 +167,38 @@ at all.
 - On an output device that also has inputs (a Scarlett, say) macOS logs one
   Microphone permission request at start. It is refused silently and audio works.
 
-## Why not a SwiftBar plugin?
+## Development
 
-A shell plugin cannot host Audio Units, run a real-time audio callback, or show a
-plugin's editor window. This needs a native process.
+```sh
+swift build
+swift test             # SoundChainCore: chain model, store, crash guard, routing
+scripts/build-app.sh   # builds build/SoundChain.app
+```
+
+`SoundChainCore` holds the model and policy logic with no audio-hardware
+dependency; the `SoundChain` target is the tap engine, plugin host and UI, and
+`CAtomics` provides the atomics shared with the audio thread (the render-snapshot pointer and flags). Before a
+release, walk through [`docs/e2e-checklist.md`](docs/e2e-checklist.md) with
+music playing.
+
+## Releasing
+
+Every push to `main` is a release. Before pushing, add a dated
+`## [X.Y.Z] - YYYY-MM-DD` section to the top of [`CHANGELOG.md`](CHANGELOG.md)
+(minor for features, patch for fixes; turn a waiting `## [Unreleased]` into
+it). When it reaches `main`, GitHub tags `vX.Y.Z` and publishes the section as
+a release titled `vX.Y.Z`. Without a new version, the `pre-push` hook refuses
+the push, a pull request cannot merge (`release / check` is required), and a
+push that reaches `main` fails the release workflow. The one exception is
+`[no release]` in the tip commit's message, for changes nothing a user runs
+(setup, CI, developer docs). Never tag or create a release by hand, and never
+`gh pr merge --admin` past a failing check. See
+[StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
+
+## License
+
+Copyright (c) 2026 Nicholas Smith. Licensed under the
+[Mozilla Public License 2.0](LICENSE). You may use, modify, sell and
+redistribute this software, including inside proprietary products, provided
+the copyright notice and license stay on these files and any modified
+versions of them are made available under the same license.
