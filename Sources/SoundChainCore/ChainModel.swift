@@ -51,15 +51,28 @@ public struct ChainSlot: Codable, Equatable, Identifiable, Sendable {
     public var bypassed: Bool
     /// The plugin's `fullState`, as a binary property list.
     public var state: Data?
+    /// A name the user gave this effect ("Pitch Down"), or nil. Chains saved
+    /// before 1.8.0 have no such key and decode with nil.
+    public var customName: String?
 
     public init(id: UUID = UUID(), component: ComponentID, name: String, manufacturer: String,
-                bypassed: Bool = false, state: Data? = nil) {
+                bypassed: Bool = false, state: Data? = nil, customName: String? = nil) {
         self.id = id
         self.component = component
         self.name = name
         self.manufacturer = manufacturer
         self.bypassed = bypassed
         self.state = state
+        self.customName = ChainSlot.normalized(customName)
+    }
+
+    /// What to call this effect: its custom name when it has one, else the plugin's name.
+    public var displayName: String { customName ?? name }
+
+    /// Trims whitespace; an empty result means no custom name.
+    public static func normalized(_ name: String?) -> String? {
+        guard let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 }
 
@@ -103,6 +116,16 @@ public struct Chain: Codable, Equatable, Sendable {
         slots[i].bypassed = bypassed
     }
 
+    /// Names slot `id` (trimmed); an empty or blank name clears it. Returns true
+    /// only when the stored name changed.
+    @discardableResult
+    public mutating func setCustomName(_ name: String?, id: UUID) -> Bool {
+        let name = ChainSlot.normalized(name)
+        guard let i = slots.firstIndex(where: { $0.id == id }), slots[i].customName != name else { return false }
+        slots[i].customName = name
+        return true
+    }
+
     /// Stores a plugin's state. Returns true only when the stored value changed.
     @discardableResult
     public mutating func setState(_ state: Data?, id: UUID) -> Bool {
@@ -126,6 +149,8 @@ public struct SlotCopy: Codable, Equatable, Sendable {
     public var bypassed: Bool
     /// The plugin's `fullState`, as a binary property list.
     public var state: Data?
+    /// The slot's custom name; absent in copies made before 1.8.0.
+    public var customName: String?
 
     /// Copies `slot`. `liveState` is the running plugin's current settings; when
     /// nil (not loaded, or it did not answer) the slot's saved settings are used.
@@ -136,11 +161,13 @@ public struct SlotCopy: Codable, Equatable, Sendable {
         manufacturer = slot.manufacturer
         bypassed = slot.bypassed
         state = liveState ?? slot.state
+        customName = slot.customName
     }
 
     /// A new slot (fresh id) with these settings.
     public func makeSlot() -> ChainSlot {
-        ChainSlot(component: component, name: name, manufacturer: manufacturer, bypassed: bypassed, state: state)
+        ChainSlot(component: component, name: name, manufacturer: manufacturer, bypassed: bypassed, state: state,
+                  customName: customName)
     }
 
     public func encoded() -> Data {

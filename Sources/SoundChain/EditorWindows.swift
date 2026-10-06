@@ -48,6 +48,10 @@ final class EditorWindows: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Retitles a slot's editor (its effect was renamed). One still being built
+    /// keeps the title it was asked for; it is set again next time it opens.
+    func setTitle(_ title: String, slotID: UUID) { panels[slotID]?.title = title }
+
     /// Destroys a slot's panel for good (the slot was removed), and drops an editor
     /// still being built for it, so it never appears.
     func close(slotID: UUID) {

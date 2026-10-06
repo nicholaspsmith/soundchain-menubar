@@ -200,7 +200,12 @@ final class AppController: NSObject, NSApplicationDelegate {
             editorsOpening[id] = slot.component
             blame.begin(slot.component, step: .editor)
         }
-        editors.open(slotID: id, title: "\(slot.name) — \(slot.manufacturer)", unit: plugin.unit)
+        editors.open(slotID: id, title: Self.editorTitle(slot), unit: plugin.unit)
+    }
+
+    /// "Pitch Down — AUPitch" for a named effect, "AUPitch — Apple" otherwise.
+    private static func editorTitle(_ slot: ChainSlot) -> String {
+        "\(slot.displayName) — \(slot.customName == nil ? slot.manufacturer : slot.name)"
     }
 
     /// Reads a plugin's settings off the main thread, then stores them (saving only
@@ -321,7 +326,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private enum Health { case processing, bypassed, error }
 
     private var slotErrors: [String] {
-        chain.slots.compactMap { slot in runner.error(for: slot.id).map { "\(slot.name): \($0)" } }
+        chain.slots.compactMap { slot in runner.error(for: slot.id).map { "\(slot.displayName): \($0)" } }
     }
 
     private var health: Health {
@@ -405,8 +410,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         } else {
             for slot in chain.slots {
                 let id = slot.id
-                menu.addItem(ToggleMenuItem.make(title: slot.name, isOn: !slot.bypassed,
-                                                 toolTip: slot.manufacturer) { [weak self] on in
+                menu.addItem(ToggleMenuItem.make(title: slot.displayName, isOn: !slot.bypassed,
+                                                 toolTip: "\(slot.name) — \(slot.manufacturer)") { [weak self] on in
                     self?.setSlot(id, on: on)
                 })
             }
@@ -451,6 +456,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// A menu-bar app has no menu bar of its own, so nothing routes ⌘A/⌘C/⌘V/⌘X/⌘Z to
     /// text fields (the Add picker's search), or ⌘C/⌘V/⌘D to the chain window's rows. An invisible main menu with the
     /// standard Edit items restores them while SoundChain's windows are active.
+    /// It also carries the chain window's Duplicate (⌘D) and Rename (⌘R).
     private func installEditMenu() {
         let edit = NSMenu(title: "Edit")
         edit.addItem(NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"))
@@ -463,6 +469,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         // The chain window's Duplicate (its copy:/paste: are the Copy and Paste above).
         edit.addItem(NSMenuItem(title: "Duplicate", action: #selector(ChainWindowController.duplicateSlot(_:)),
                                 keyEquivalent: "d"))
+        edit.addItem(NSMenuItem(title: "Rename", action: #selector(ChainWindowController.renameSlot(_:)),
+                                keyEquivalent: "r"))
         let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         editItem.submenu = edit
         let main = NSMenu()
@@ -528,6 +536,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             return added?.id
         }
         window.canPaste = { [unowned self] in self.hasSlotToPaste }
+        window.onRename = { [unowned self] id, name in
+            guard self.chain.setCustomName(name, id: id) else { return }
+            self.save()
+            if let slot = self.chain.slot(id: id) { self.editors.setTitle(Self.editorTitle(slot), slotID: id) }
+        }
         window.canOpen = true
         window.onOpen = { [unowned self] id in self.openEditor(id) }
         return window

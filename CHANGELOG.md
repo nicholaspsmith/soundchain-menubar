@@ -7,6 +7,13 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.8.0] - 2026-10-06
+
+- Give effects names of your own: in Audio Chain…, click the name column next to an effect (it says "Add a name" until you do), type a name such as "Pitch Down", and press Return. Escape cancels, and an empty name goes back to the plugin's own
+- **Rename** button in Audio Chain… (also Return or ⌘R on the selected effect)
+- The menu lists each effect by its custom name when it has one (hover for the plugin and maker), and editor windows and error lines use it too, e.g. "Pitch Down — AUPitch"
+- Duplicate and ⌘C/⌘V keep the custom name on the copy
+
 ## [1.7.0] - 2026-10-06
 
 - Audio Chain… has a **Duplicate** button (⌘D): it adds a copy of the selected effect, with all its current settings, to the end of the chain
