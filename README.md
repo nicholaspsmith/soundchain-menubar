@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.4.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.5.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -39,7 +39,7 @@ cd soundchain-menubar && ./install.sh
 Start at Login, then (re)launches the app. On first launch, allow **System
 Audio Recording** when asked.
 
-Start at Login is also in the menu, or run the installed binary:
+Start at Login is also in **Settings ▸ Start at Login**, or run the installed binary:
 `"$HOME/Applications/SoundChain.app/Contents/MacOS/SoundChain" --login on`
 (or `off`, `status`).
 
@@ -50,6 +50,8 @@ Start at Login is also in the menu, or run the installed binary:
   one to bypass it, **Open** shows its own editor, **–** removes it (and selects the
   next row, so you can keep pressing).
 - **Bypass** turns all processing off; audio passes through untouched.
+- **Settings ▸** holds Start at Login and the running version (StatusItemKit's
+  shared `SettingsMenu`); **Quit SoundChain** (⌘Q) is below it.
 - Settings save to `~/Library/Application Support/SoundChain/chain.json`, including
   each plugin's own state (captured when its editor closes, every 5 s while one is
   open, and at quit).

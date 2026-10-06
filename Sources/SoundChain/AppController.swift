@@ -329,11 +329,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         let bypass = item("Bypass", #selector(toggleBypass))
         bypass.state = chain.masterBypass ? .on : .off
         menu.addItem(bypass)
-        let login = item("Start at Login", #selector(toggleLogin))
-        login.state = LoginItem.isEnabled ? .on : .off
-        menu.addItem(login)
-        menu.addItem(AppVersion.menuItem())
-        menu.addItem(NSMenuItem(title: "Quit SoundChain", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        // Settings ▸ holds only the shared rows (Start at Login, Version):
+        // everything SoundChain itself offers is a control used day to day.
+        SettingsMenu.addFooter(to: menu, appName: "SoundChain")
     }
 
     private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
@@ -423,8 +421,6 @@ final class AppController: NSObject, NSApplicationDelegate {
         runner.sync(to: chain)
         startAudio()
     }
-
-    @objc private func toggleLogin() { LoginItem.toggle() }
 
     @objc private func reconnectBluetooth() {
         guard let target = BluetoothReconnect.currentTarget() else { return }

@@ -7,6 +7,12 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.5.0] - 2026-10-05
+
+### Changed
+
+- The menu ends with a **Settings** submenu, the same one every Menumon app now has: Start at Login and the version moved there. Audio Chain…, Reconnect and Bypass stay at the top
+
 ## [1.4.0] - 2026-10-02
 
 ### Added
