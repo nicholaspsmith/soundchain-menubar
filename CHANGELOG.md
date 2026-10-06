@@ -7,6 +7,10 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.6.0] - 2026-10-06
+
+- feat: the menu lists every effect in the chain, ticked when it's on; click one to switch it on or off
+
 ## [1.5.1] - 2026-10-05
 
 - New app icon: Carol as she looks in the menu bar
