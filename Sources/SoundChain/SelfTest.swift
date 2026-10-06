@@ -26,6 +26,8 @@ enum SelfTest {
         do {
             try renderChecks(check)
             try runnerChecks(check)
+            copyChecks(check)
+            lifetimeChecks(check)
         } catch {
             check(false, "unexpected error: \(error.localizedDescription)")
         }
@@ -229,6 +231,92 @@ enum SelfTest {
         _ = spin { !midLoad.isLoading }
         check(midLoad.plugin(for: pending.id) == nil && midLoad.activeCount == 0,
               "a plugin whose hardware goes away mid-load is dropped when the load finishes")
+    }
+
+    /// Duplicate and ⌘C/⌘V carry a plugin's settings over: change a parameter on the
+    /// running instance (its saved state is now stale), copy it the way the app does
+    /// (live `fullState`), and read the parameter back from the new instance.
+    static let copyCases: [(name: String, component: ComponentID, address: AUParameterAddress, value: AUValue)] = [
+        ("AUDelay", delay, 2, -30),                                  // Feedback
+        ("AUNBandEQ", eq, 0, -12),                                   // Global Gain
+        ("AUGraphicEQ", ComponentID("aufx", "greq", "appl")!, 2, 7), // 31.5 Hz band
+        ("AUReverb2", ComponentID("aufx", "rvb2", "appl")!, 1, -5),  // Gain
+    ]
+
+    static func copyChecks(_ check: (Bool, String) -> Void) {
+        for test in copyCases {
+            let runner = ChainRunner()
+            runner.setFormat(RenderFormat(sampleRate: sampleRate, maxFrames: 4096))
+            var chain = Chain()
+            let original = chain.add(component: test.component, name: test.name, manufacturer: "Apple")
+            runner.sync(to: chain)
+            guard spin(until: { !runner.isLoading }), let plugin = runner.plugin(for: original.id),
+                  let parameter = plugin.unit.parameterTree?.parameter(withAddress: test.address) else {
+                check(false, "\(test.name): loads, with parameter \(test.address)")
+                continue
+            }
+            let label = "\(test.name) \(parameter.displayName)"
+            let before = parameter.value
+            parameter.value = test.value
+            check(chain.slot(id: original.id)?.state == nil && before != test.value,
+                  "\(label): changed \(before) → \(test.value) on the live plugin only (saved state is stale)")
+
+            func value(_ id: UUID) -> AUValue? {
+                runner.plugin(for: id)?.unit.parameterTree?.parameter(withAddress: test.address)?.value
+            }
+            let live = runner.captureState(for: original.id)
+            let duplicate = chain.duplicate(id: original.id, liveState: live)!
+            runner.sync(to: chain)
+            _ = spin { !runner.isLoading }
+            let copied = value(duplicate.id)
+            check(chain.slots.last?.id == duplicate.id && runner.plugin(for: duplicate.id).map { $0 !== plugin } == true,
+                  "\(label): Duplicate adds a new instance at the end")
+            check(copied.map { abs($0 - test.value) < 0.001 } == true,
+                  "\(label): Duplicate keeps the setting (copy reads \(copied.map { "\($0)" } ?? "nothing"))")
+
+            // ⌘C / ⌘V, through the pasteboard payload, pasted twice below the original.
+            guard let payload = SlotCopy(encoded: SlotCopy(original, liveState: live).encoded()) else {
+                check(false, "\(label): the copy survives the pasteboard encoding")
+                continue
+            }
+            let first = chain.insert(payload, below: original.id)
+            let second = chain.insert(payload, below: original.id)
+            runner.sync(to: chain)
+            _ = spin { !runner.isLoading }
+            check(chain.slots.map(\.id) == [original.id, second.id, first.id, duplicate.id],
+                  "\(label): pastes land directly below the selected slot")
+            check([first.id, second.id].allSatisfy { value($0).map { abs($0 - test.value) < 0.001 } == true },
+                  "\(label): both pastes keep the setting")
+            runner.plugin(for: first.id)?.unit.parameterTree?.parameter(withAddress: test.address)?.value = before
+            check(value(second.id).map { abs($0 - test.value) < 0.001 } == true
+                  && value(original.id).map { abs($0 - test.value) < 0.001 } == true,
+                  "\(label): pasted copies are independent instances")
+        }
+    }
+
+    /// The render pull block refuses more frames than the buffers hold, and a dropped
+    /// runner frees what it published.
+    static func lifetimeChecks(_ check: (Bool, String) -> Void) {
+        let chain = RenderChain(stages: [], maxFrames: 512)
+        let list = AudioBufferList.allocate(maximumBuffers: 2)
+        defer { free(list.unsafeMutablePointer) }
+        func pull(_ frames: Int) -> AUAudioUnitStatus {
+            for i in 0..<2 { list[i] = AudioBuffer(mNumberChannels: 1, mDataByteSize: 0, mData: nil) }
+            var flags = AudioUnitRenderActionFlags()
+            var time = AudioTimeStamp()
+            return chain.pull(&flags, &time, AUAudioFrameCount(frames), 0, list.unsafeMutablePointer)
+        }
+        check(pull(512) == noErr, "the pull block serves up to maxFrames")
+        check(pull(513) == kAudioUnitErr_TooManyFramesToProcess, "the pull block refuses more than maxFrames")
+
+        weak var published: RenderChain?
+        autoreleasepool {
+            let runner = ChainRunner()
+            runner.setFormat(RenderFormat(sampleRate: sampleRate, maxFrames: 4096))
+            runner.sync(to: Chain())
+            published = runner.source.load().map { Unmanaged<RenderChain>.fromOpaque($0).takeUnretainedValue() }
+        }
+        check(published == nil, "a dropped ChainRunner frees its published snapshot")
     }
 
     // MARK: Helpers (also used by later self-tests)

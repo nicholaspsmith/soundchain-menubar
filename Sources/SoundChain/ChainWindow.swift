@@ -8,8 +8,15 @@ import AppKit
 import SoundChainCore
 
 /// The chain editor: a drag-to-reorder list of effects with bypass checkboxes and
-/// Open buttons, plus Add… and –. Holds no chain state; it asks `rows()` on reload.
-final class ChainWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
+/// Open buttons, plus Add…, – and Duplicate, and ⌘C/⌘V/⌘D on the selected row.
+/// Holds no chain state; it asks `rows()` on reload.
+///
+/// ⌘C/⌘V/⌘D arrive as `copy:`/`paste:`/`duplicateSlot:` from the app's hidden Edit
+/// menu: the table does not answer them, so they travel up the responder chain to
+/// the window and on to this controller. A text field in the Add picker gets them
+/// first, so typing there still copies and pastes text.
+final class ChainWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate,
+    NSMenuItemValidation {
     struct Row: Equatable {
         var slot: ChainSlot
         var error: String?
@@ -25,12 +32,21 @@ final class ChainWindowController: NSWindowController, NSTableViewDataSource, NS
     var onRemove: (UUID) -> Void = { _ in }
     var onAdd: (CatalogEntry) -> Void = { _ in }
     var onOpen: (UUID) -> Void = { _ in }
+    /// Appends a copy of the slot to the end of the chain; calls back with the new
+    /// slot's id (later, if the plugin's settings take a moment to read).
+    var onDuplicate: (UUID, @escaping (UUID?) -> Void) -> Void = { _, done in done(nil) }
+    /// Copies the slot, with its current settings, to the clipboard.
+    var onCopy: (UUID) -> Void = { _ in }
+    /// Pastes the copied slot below the given one (or at the end); returns the new id.
+    var onPaste: (UUID?) -> UUID? = { _ in nil }
+    var canPaste: () -> Bool = { false }
     /// False until editor windows exist (Task 11).
     var canOpen = false
 
     private static let dragType = NSPasteboard.PasteboardType("com.nicholaspsmith.SoundChain.row")
     private let table = NSTableView()
     private let removeButton = NSButton(title: "–", target: nil, action: nil)
+    private let duplicateButton = NSButton(title: "Duplicate", target: nil, action: nil)
     private var current: [Row] = []
     private var addPopover: NSPopover?
     /// After a removal, the row index to select next (so repeated – presses keep deleting).
@@ -67,7 +83,25 @@ final class ChainWindowController: NSWindowController, NSTableViewDataSource, NS
             table.selectRowIndexes([min(row, current.count - 1)], byExtendingSelection: false)
         }
         selectAfterRemove = nil
-        removeButton.isEnabled = current.indices.contains(table.selectedRow)
+        updateButtons()
+    }
+
+    /// Selects a slot (a new copy) and scrolls it into view.
+    func select(_ id: UUID) {
+        if !current.contains(where: { $0.slot.id == id }) { reload() }
+        guard let row = current.firstIndex(where: { $0.slot.id == id }) else { return }
+        table.selectRowIndexes([row], byExtendingSelection: false)
+        table.scrollRowToVisible(row)
+        window?.makeFirstResponder(table)
+    }
+
+    private var selectedID: UUID? {
+        current.indices.contains(table.selectedRow) ? current[table.selectedRow].slot.id : nil
+    }
+
+    private func updateButtons() {
+        removeButton.isEnabled = selectedID != nil
+        duplicateButton.isEnabled = selectedID != nil
     }
 
     private func buildContent() {
@@ -92,7 +126,11 @@ final class ChainWindowController: NSWindowController, NSTableViewDataSource, NS
         removeButton.target = self
         removeButton.action = #selector(removeSelected)
         removeButton.isEnabled = false
-        let buttons = NSStackView(views: [addButton, removeButton])
+        duplicateButton.target = self
+        duplicateButton.action = #selector(duplicateSlot(_:))
+        duplicateButton.isEnabled = false
+        duplicateButton.toolTip = "Adds a copy of the selected effect, with the same settings, to the end of the chain (⌘D)"
+        let buttons = NSStackView(views: [addButton, removeButton, duplicateButton])
         buttons.orientation = .horizontal
         buttons.translatesAutoresizingMaskIntoConstraints = false
 
@@ -122,9 +160,7 @@ final class ChainWindowController: NSWindowController, NSTableViewDataSource, NS
                            onOpen: { [weak self] in self?.onOpen(id) })
     }
 
-    func tableViewSelectionDidChange(_ notification: Notification) {
-        removeButton.isEnabled = current.indices.contains(table.selectedRow)
-    }
+    func tableViewSelectionDidChange(_ notification: Notification) { updateButtons() }
 
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
         let item = NSPasteboardItem()
@@ -166,6 +202,33 @@ final class ChainWindowController: NSWindowController, NSTableViewDataSource, NS
         guard current.indices.contains(table.selectedRow) else { return }
         selectAfterRemove = table.selectedRow
         onRemove(current[table.selectedRow].slot.id)
+    }
+
+    @objc func duplicateSlot(_ sender: Any?) {
+        guard let id = selectedID else { return }
+        onDuplicate(id) { [weak self] newID in
+            if let newID { self?.select(newID) }
+        }
+    }
+
+    // MARK: Copy and paste (Edit menu, through the responder chain)
+
+    @objc func copy(_ sender: Any?) {
+        guard let id = selectedID else { return }
+        onCopy(id)
+    }
+
+    @objc func paste(_ sender: Any?) {
+        guard let newID = onPaste(selectedID) else { NSSound.beep(); return }
+        select(newID)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(copy(_:)), #selector(duplicateSlot(_:)): return selectedID != nil
+        case #selector(paste(_:)): return canPaste()
+        default: return true
+        }
     }
 
     @objc private func showAdd(_ sender: NSButton) {

@@ -6,13 +6,14 @@
 
 import AppKit
 import Foundation
+import SoundChainCore
 
 /// System-audio capture permission ("System Audio Recording Only", under Privacy &
 /// Security ▸ Screen & System Audio Recording). There is no public preflight API, so
 /// this calls TCC's private functions through dlopen, as AudioCap does. If they
 /// cannot be found the status is `.unknown` and the app simply tries the tap.
 enum AudioPermission {
-    enum Status { case authorized, denied, unknown }
+    typealias Status = CapturePermission
 
     private static let service = "kTCCServiceAudioCapture" as CFString
     private typealias PreflightFn = @convention(c) (CFString, CFDictionary?) -> Int

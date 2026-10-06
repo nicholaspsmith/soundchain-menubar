@@ -62,3 +62,9 @@ Final: minor (deferred): ChainStore.load treats any read error as a missing file
 Final: minor (deferred): ChainRunner has no deinit (selftest-only leak)
 Final: minor (deferred): README Version line — added at release
 Final: Ruling (declined-to-judge list): floating editor panels, red icon for a not-installed plugin, enabled-style bypass checkbox, Scarlett Microphone request, taptest via bundle, Pedál reroute, hidden panels per slot, markStable at 60 s, HAL calls on main — all stand as built: they match the plan or are documented OS behaviour — cost if wrong: small UX papercuts
+
+1.7.0 (2026-10-06): the minors deferred at the v1.0.0 final review (GitHub #2–#9) are fixed:
+zombie editor panel (per-request token in EditorWindows), pull block clamp (selftest), buffer-size
+listener + like-for-like needsRestart (TapEngine), permission grant noticed on the tick and Grant
+offered on tap failure with unknown permission (PermissionAdvice, unit-tested), ChainStore.load
+read errors (moved aside, or saving blocked; unit-tested), ChainRunner deinit (selftest).
