@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.5.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.6.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -49,6 +49,9 @@ Start at Login is also in **Settings ▸ Start at Login**, or run the installed 
   Pro-Q, Pro-L 2 and Nectar 3 are pinned at the top. Drag rows to reorder, untick
   one to bypass it, **Open** shows its own editor, **–** removes it (and selects the
   next row, so you can keep pressing).
+- Below it, the menu lists every effect in the chain, in order, with a tick
+  when it's on. Click one to switch it on or off, as its checkbox in Audio
+  Chain… does.
 - **Bypass** turns all processing off; audio passes through untouched.
 - **Settings ▸** holds Start at Login and the running version (StatusItemKit's
   shared `SettingsMenu`); **Quit SoundChain** (⌘Q) is below it.

@@ -326,6 +326,21 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
+        // The chain itself, in order: a tick means the effect is on. Clicking
+        // one switches it on or off, as its checkbox in Audio Chain… does.
+        if chain.slots.isEmpty {
+            menu.addItem(disabled("No effects in the chain"))
+        } else {
+            for slot in chain.slots {
+                let row = item(slot.name, #selector(toggleSlot(_:)))
+                row.state = slot.bypassed ? .off : .on
+                row.representedObject = slot.id
+                row.toolTip = slot.manufacturer
+                menu.addItem(row)
+            }
+        }
+        menu.addItem(.separator())
+
         let bypass = item("Bypass", #selector(toggleBypass))
         bypass.state = chain.masterBypass ? .on : .off
         menu.addItem(bypass)
@@ -408,7 +423,13 @@ final class AppController: NSObject, NSApplicationDelegate {
         return window
     }
 
-    @objc private func toggleBypass() {
+    @objc private func toggleSlot(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID,
+              let slot = chain.slots.first(where: { $0.id == id }) else { return }
+        mutate { $0.setBypassed(!slot.bypassed, id: id) }
+    }
+
+        @objc private func toggleBypass() {
         notice = nil
         mutate { $0.masterBypass.toggle() }
     }
