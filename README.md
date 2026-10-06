@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.7.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.8.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -55,9 +55,15 @@ Start at Login is also in **Settings ▸ Start at Login**, or run the installed 
   below the selected row (at the end if none is selected) and selects it. Each
   paste is a new, independent instance, and the copy stays on the clipboard after
   the window closes. A plugin that ignores restored settings gets its defaults.
-- Below it, the menu lists every effect in the chain, in order, with a tick
-  when it's on. Click one to switch it on or off, as its checkbox in Audio
-  Chain… does; the menu stays open, so you can switch several in one go.
+- **Names**: each row has a column for a name of your own, so two AUPitch rows
+  can read "Pitch Up" and "Pitch Down". Click it (it says "Add a name" until you
+  do), or select a row and press **Rename**, Return or **⌘R**, then type and press
+  Return; clicking away also saves, Escape cancels, and an empty name goes back to
+  the plugin's own. The menu, editor window titles ("Pitch Down — AUPitch") and
+  error lines use the custom name, and Duplicate and ⌘C/⌘V keep it.
+- Below it, the menu lists every effect in the chain, in order (by its custom
+  name when it has one), with a tick when it's on. Click one to switch it on or
+  off, as its checkbox in Audio Chain… does; the menu stays open, so you can switch several in one go.
 - **Bypass** turns all processing off; audio passes through untouched. Ticking
   it (or an effect) updates the status line at the top in place.
 - **Settings ▸** holds Start at Login and the running version (StatusItemKit's
