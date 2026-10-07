@@ -7,6 +7,10 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.9.0] - 2026-10-07
+
+- No user-visible changes.
+
 ## [1.8.0] - 2026-10-06
 
 - Give effects names of your own: in Audio Chain…, click the name column next to an effect (it says "Add a name" until you do), type a name such as "Pitch Down", and press Return. Escape cancels, and an empty name goes back to the plugin's own
