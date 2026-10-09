@@ -10,7 +10,7 @@ and publishes the section as the release notes. Versions follow
 ## [1.11.0] - 2026-10-08
 
 - Settings ▸ **Keep Headphones to This Mac** (Bose headphones, off by default): while they are the output, any other device connected to them, usually your phone, is disconnected from them, now and every 30 seconds. Bose headphones share their radio between two sources (multipoint), and a phone that is merely connected, playing nothing, turns the Mac's audio into continuous crackle. The menu says who was dropped, e.g. "Dropped Magooberstein from Osiris"
-- Works with any Bose headset that takes commands from the Bose app (QuietComfort 35 II and later); other headphones are left alone and the menu says so
+- Works with any Bose headset that takes commands from the Bose app (QuietComfort 35 II and later); other headphones are left alone and the menu says so. If the headphones' controls stop answering, the menu says to turn them off and on
 
 ## [1.10.0] - 2026-10-08
 

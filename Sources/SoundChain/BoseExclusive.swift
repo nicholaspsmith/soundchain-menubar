@@ -238,9 +238,10 @@ final class BoseExclusive {
         func rfcommChannelData(_ channel: IOBluetoothRFCOMMChannel!, data: UnsafeMutableRawPointer!, length: Int) {
             guard !done else { return }
             received.append(contentsOf: UnsafeRawBufferPointer(start: data, count: length))
-            if case .disconnect(let remaining) = step, let first = remaining.first,
-               BoseLink.disconnectOutcome(received, address: first.address) != nil {
-                settled()
+            if case .disconnect(let remaining) = step, let first = remaining.first {
+                // "Processing" comes first and the result a moment later: wait for
+                // the result (or the deadline), not for quiet.
+                if BoseLink.disconnectOutcome(received, address: first.address) != nil { settled() }
                 return
             }
             // A reply can arrive in pieces; it is complete once the line goes quiet.
