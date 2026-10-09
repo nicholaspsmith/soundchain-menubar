@@ -38,6 +38,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private let runner = ChainRunner()
     private let uad = UADHardware()
     private let bluetooth = BluetoothReconnect()
+    private let exclusive = BoseExclusive()
     private lazy var engine = TapEngine(source: runner.source)
     private(set) var chain = Chain()
     /// A one-off message for the menu (corrupt chain file, crash-loop bypass, save failure).
@@ -116,14 +117,21 @@ final class AppController: NSObject, NSApplicationDelegate {
         runner.willStep = { [blame] id, step in blame.begin(id, step: step) }
         runner.didStep = { [blame] id, step in blame.end(id, step: step) }
         engine.onFormat = { [weak self] format in self?.runner.setFormat(format) }
-        engine.onStateChange = { [weak self] _ in self?.refreshIcon() }
+        engine.onStateChange = { [weak self] _ in
+            self?.refreshIcon()
+            self?.exclusive.outputChanged()
+        }
         runner.isSuspended = { [uad] slot in !uad.isPresent && UADCheck.needsHardware(slot) }
         uad.onChange = { [weak self] in self?.uadHardwareChanged() }
         uad.start()
         bluetooth.onFinish = { [weak self] result in
             self?.notice = result
             self?.refreshIcon()
+            self?.exclusive.outputChanged()
         }
+        exclusive.isBusy = { [bluetooth] in bluetooth.inProgress }
+        exclusive.onChange = { [weak self] in self?.refreshIcon() }
+        exclusive.outputChanged()
         runner.sync(to: chain)
         startAudio()
         editors.onClose = { [weak self] id in self?.captureState(id) }
@@ -379,6 +387,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         statusRows = statusLines.map(disabled)
         statusRows.forEach(menu.addItem)
         if let notice { menu.addItem(disabled(notice)) }
+        if let kept = exclusive.statusLine { menu.addItem(disabled(kept)) }
         for error in slotErrors { menu.addItem(disabled(error)) }
         if let uadWarning { menu.addItem(disabled(uadWarning)) }
         menu.addItem(.separator())
@@ -421,9 +430,20 @@ final class AppController: NSObject, NSApplicationDelegate {
         menu.addItem(ToggleMenuItem.make(title: "Bypass", isOn: chain.masterBypass) { [weak self] on in
             self?.setBypass(on)
         })
-        // Settings ▸ holds only the shared rows (Start at Login, Version):
-        // everything SoundChain itself offers is a control used day to day.
-        SettingsMenu.addFooter(to: menu, appName: "SoundChain")
+        // Settings ▸ holds the one setting that is set and forgotten, then the
+        // shared rows (Start at Login, Version): everything else SoundChain offers
+        // is a control used day to day.
+        SettingsMenu.addFooter(to: menu, appName: "SoundChain", items: { [weak self] settings in
+            guard let self else { return }
+            settings.addItem(ToggleMenuItem.make(
+                title: "Keep Headphones to This Mac", isOn: self.exclusive.isEnabled,
+                toolTip: "Bose headphones only. While they are the output, any other device connected to them "
+                    + "(your phone) is disconnected, now and every \(Int(BoseExclusive.interval)) seconds, "
+                    + "so the radio is not shared and the sound stays clean."
+            ) { [weak self] on in
+                self?.exclusive.isEnabled = on
+            })
+        })
     }
 
     private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {

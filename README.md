@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.8.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.11.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -109,6 +109,17 @@ current output is Bluetooth, the menu has **Reconnect <name>**, which does exact
 that. It first saves the last 5 minutes of Bluetooth and audio logs to
 `~/Library/Logs/SoundChain/bluetooth-<name>-<time>.log`, so a recurring cause can
 be tracked down later. The first use asks for Bluetooth access.
+
+### Crackle from a phone on Bose headphones
+
+Bose headphones connect to two devices at once (multipoint) and share one radio
+between them, so a phone that is connected but playing nothing can turn the Mac's
+audio into continuous crackle. **Settings ▸ Keep Headphones to This Mac** (off by
+default) asks the headphones, in the Bose app's own protocol, to drop every other
+device while they are the Mac's output, now and every 30 seconds, since a phone
+reconnects on its own. The menu says who was dropped ("Dropped Magooberstein from
+Osiris"). Works with any Bose headset the Bose app can manage (QuietComfort 35 II
+and later); other headphones are left alone and the menu says so.
 
 ## Pinned effects
 
