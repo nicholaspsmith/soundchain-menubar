@@ -7,6 +7,11 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.12.0] - 2026-10-09
+
+- Switching an effect on or off no longer clicks: the effect's signal is crossfaded in or out over 40 ms instead of cut in. The same goes for Bypass, for adding or removing an effect, and for the first moment after SoundChain starts
+- Fix: Settings ▸ Keep Headphones to This Mac could report that the headphones wouldn't drop the phone when they were still about to; it now waits for their answer
+
 ## [1.11.0] - 2026-10-08
 
 - Settings ▸ **Keep Headphones to This Mac** (Bose headphones, off by default): while they are the output, any other device connected to them, usually your phone, is disconnected from them, now and every 30 seconds. Bose headphones share their radio between two sources (multipoint), and a phone that is merely connected, playing nothing, turns the Mac's audio into continuous crackle. The menu says who was dropped, e.g. "Dropped Magooberstein from Osiris"
