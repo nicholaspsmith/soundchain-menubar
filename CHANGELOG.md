@@ -7,6 +7,11 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.13.0] - 2026-10-09
+
+- **Keep Headphones to This Mac** moves out of Settings ▸ into the main menu, under the output rows
+- Carol shows it: with it off, she wears her headphones round her neck (StatusItemKit 0.29.0)
+
 ## [1.12.0] - 2026-10-09
 
 - Switching an effect on or off no longer clicks: the effect's signal is crossfaded in or out over 40 ms instead of cut in. The same goes for Bypass, for adding or removing an effect, and for the first moment after SoundChain starts
