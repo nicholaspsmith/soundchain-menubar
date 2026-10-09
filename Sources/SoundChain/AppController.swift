@@ -145,6 +145,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        exclusive.stop()
         editors.closeAll(notify: false)
         for slot in chain.slots {
             if let data = captureStateBlocking(slot.id) { chain.setState(data, id: slot.id) }

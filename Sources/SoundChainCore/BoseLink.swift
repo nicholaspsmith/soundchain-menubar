@@ -74,17 +74,36 @@ public enum BoseLink {
 
     // MARK: Replies
 
+    /// Splits what arrived into packets by their length byte. The headphones also
+    /// send events of their own (a device coming or going), which can land in the
+    /// same read as a reply, so every reply is looked for among the packets.
+    public static func packets(in data: [UInt8]) -> [[UInt8]] {
+        var packets: [[UInt8]] = []
+        var i = 0
+        while i + 4 <= data.count {
+            let end = min(i + 4 + Int(data[i + 3]), data.count)
+            packets.append(Array(data[i..<end]))
+            i = end
+        }
+        return packets
+    }
+
+    /// The first packet for `block`/`function` with the status operator.
+    static func reply(in data: [UInt8], block: UInt8, function: UInt8) -> [UInt8]? {
+        packets(in: data).first { $0[0] == block && $0[1] == function && $0[2] & 0x0F == Operator.status.rawValue }
+    }
+
     /// True when the handshake reply is well formed: anything else on the channel is
     /// not a Bose headset speaking this protocol.
     public static func isInitReply(_ data: [UInt8]) -> Bool {
-        data.count >= 4 && data[0] == 0 && data[1] == 1 && data[2] & 0x0F == Operator.status.rawValue
+        reply(in: data, block: 0, function: 1) != nil
     }
 
     /// The paired addresses in a ListDevices reply. The payload's first byte is a
     /// count of some kind that does not match the connected devices, so it is skipped
     /// and each device's status is asked for separately.
     public static func parseDeviceList(_ data: [UInt8]) -> [[UInt8]] {
-        guard data.count >= 5, data[0] == 4, data[1] == 4, data[2] & 0x0F == Operator.status.rawValue else { return [] }
+        guard let data = reply(in: data, block: 4, function: 4), data.count >= 5 else { return [] }
         let payload = data.dropFirst(4).prefix(Int(data[3])).dropFirst()
         return stride(from: payload.startIndex, to: payload.endIndex, by: 6).compactMap { start in
             let address = payload[start..<min(start + 6, payload.endIndex)]
@@ -94,7 +113,7 @@ public enum BoseLink {
 
     /// An Info reply: `04 05 03 len <address> <status> <2 bytes> <name>`.
     public static func parseInfo(_ data: [UInt8]) -> Device? {
-        guard data.count >= 13, data[0] == 4, data[1] == 5, data[2] & 0x0F == Operator.status.rawValue else { return nil }
+        guard let data = reply(in: data, block: 4, function: 5), data.count >= 13 else { return nil }
         let payload = data.dropFirst(4).prefix(Int(data[3]))
         guard payload.count >= 9 else { return nil }
         let address = Array(payload.prefix(6))
@@ -106,19 +125,13 @@ public enum BoseLink {
     /// Whether a Disconnect reply (possibly several packets run together) ends in
     /// a result or an error for `address`.
     public static func disconnectOutcome(_ data: [UInt8], address: [UInt8]) -> Bool? {
-        var i = 0
         var outcome: Bool?
-        while i + 4 <= data.count {
-            let length = Int(data[i + 3])
-            let end = min(i + 4 + length, data.count)
-            if data[i] == 4, data[i + 1] == 2 {
-                switch Operator(rawValue: data[i + 2] & 0x0F) {
-                case .result: outcome = true
-                case .error: outcome = false
-                default: break
-                }
+        for packet in packets(in: data) where packet[0] == 4 && packet[1] == 2 {
+            switch Operator(rawValue: packet[2] & 0x0F) {
+            case .result: outcome = true
+            case .error: outcome = false
+            default: break
             }
-            i = end
         }
         return outcome
     }

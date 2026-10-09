@@ -6,6 +6,7 @@
 
 import Foundation
 import IOBluetooth
+import OSLog
 import SoundChainCore
 
 /// Keeps Bose headphones to this Mac: while they are the output and the setting is
@@ -37,6 +38,18 @@ final class BoseExclusive {
     private var unsupported: Set<String> = []
     private var timer: Timer?
     private var session: Session?
+    private let log = Logger(subsystem: "com.nicholaspsmith.SoundChain", category: "bose")
+    private var stopped = false
+    /// Checks in a row that could not open the channel. bluetoothd can be left
+    /// holding the channel for nobody (a process that died mid-open); only the
+    /// headphones reconnecting clears it, so after a few the menu says so.
+    private var unreachableRuns = 0
+    static let unreachableRunsBeforeAdvice = 3
+    /// The process's Bluetooth stack powers up on first use; an open sent in that
+    /// same instant is dropped without a word. So the first use is a harmless one,
+    /// and the first conversation waits.
+    private var warmedUp = false
+    static let warmUpDelay: TimeInterval = 3
 
     /// The menu's line about this, if there is one.
     var statusLine: String? {
@@ -47,6 +60,7 @@ final class BoseExclusive {
 
     /// Call when the output device may have changed.
     func outputChanged() {
+        guard !stopped else { return }
         let next = BluetoothReconnect.currentTarget()
         let same = next?.address == target?.address
         target = next
@@ -61,6 +75,18 @@ final class BoseExclusive {
         return !unsupported.contains(target.address)
     }
 
+    /// On quit: no new conversation, and any open channel is closed now, while
+    /// bluetoothd can still hear it. A process that dies with an open in flight
+    /// leaves bluetoothd holding a link nobody owns, and the channel cannot be
+    /// opened again until the headphones reconnect.
+    func stop() {
+        stopped = true
+        timer?.invalidate()
+        timer = nil
+        session?.cancel()
+        session = nil
+    }
+
     private func apply() {
         timer?.invalidate()
         timer = nil
@@ -68,14 +94,23 @@ final class BoseExclusive {
             onChange?()
             return
         }
-        check()
+        if warmedUp {
+            check()
+        } else {
+            warmedUp = true
+            _ = IOBluetoothDevice.pairedDevices()
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.warmUpDelay) { [weak self] in
+                guard let self, self.timer != nil else { return }
+                self.check()
+            }
+        }
         let timer = Timer(timeInterval: Self.interval, repeats: true) { [weak self] _ in self?.check() }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
 
     private func check() {
-        guard session == nil, !isBusy(), let target else { return }
+        guard !stopped, session == nil, !isBusy(), let target else { return }
         session = Session(address: target.address) { [weak self] outcome in
             self?.session = nil
             self?.finish(outcome, target: target)
@@ -89,15 +124,24 @@ final class BoseExclusive {
             timer?.invalidate()
             timer = nil
         case .unreachable(let why):
-            NSLog("SoundChain: couldn't reach %@'s controls: %@", target.name, why)
+            log.error("couldn't reach \(target.name, privacy: .public)'s controls: \(why, privacy: .public)")
+            unreachableRuns += 1
+            if unreachableRuns >= Self.unreachableRunsBeforeAdvice {
+                lastEvent = "Can't reach \(target.name)'s controls: turn them off and on"
+            }
         case .dropped(let names):
+            unreachableRuns = 0
+            if lastEvent?.hasPrefix("Can't reach") == true { lastEvent = nil }
             if !names.isEmpty {
                 lastEvent = "Dropped \(names.joined(separator: ", ")) from \(target.name)"
-                NSLog("SoundChain: %@", lastEvent!)
+                log.notice("\(self.lastEvent!, privacy: .public)")
+            } else {
+                log.info("\(target.name, privacy: .public): nothing else connected")
             }
         case .failed(let names):
+            unreachableRuns = 0
             lastEvent = "\(target.name) wouldn't drop \(names.joined(separator: ", "))"
-            NSLog("SoundChain: %@", lastEvent!)
+            log.error("\(self.lastEvent!, privacy: .public)")
         }
         onChange?()
     }
@@ -265,13 +309,19 @@ final class BoseExclusive {
             DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
         }
 
-        private func finish(_ outcome: Outcome) {
+        /// Closes the channel without reporting.
+        func cancel() {
             guard !done else { return }
             done = true
             settle?.cancel()
             deadline?.cancel()
             channel?.close()
             channel = nil
+        }
+
+        private func finish(_ outcome: Outcome) {
+            guard !done else { return }
+            cancel()
             completion(outcome)
         }
 

@@ -54,6 +54,17 @@ final class BoseLinkTests: XCTestCase {
         XCTAssertNil(BoseLink.parseInfo([0x04, 0x05, 0x04, 0x00]))
     }
 
+    func testReplyFoundAfterAnEventPacket() {
+        // An 11-byte event from the headphones, then the Info reply.
+        let event: [UInt8] = [0x04, 0x09, 0x03, 0x07, 0x01] + phone
+        let info: [UInt8] = [0x04, 0x05, 0x03, 0x16] + phone + [0x01, 0x02, 0x03] + Array("Magooberstein".utf8)
+        XCTAssertEqual(BoseLink.parseInfo(event + info)?.name, "Magooberstein")
+        XCTAssertEqual(BoseLink.parseDeviceList(event + [0x04, 0x04, 0x03, 0x07, 0x01] + phone), [phone])
+        XCTAssertTrue(BoseLink.isInitReply(event + [0x00, 0x01, 0x03, 0x05, 0x31, 0x2E, 0x30, 0x2E, 0x34]))
+        XCTAssertEqual(BoseLink.packets(in: event + info).count, 2)
+        XCTAssertEqual(BoseLink.packets(in: [0x04, 0x05]), [])  // too short to be a packet
+    }
+
     func testPackets() {
         XCTAssertEqual(BoseLink.infoPacket(address: phone), [0x04, 0x05, 0x01, 0x06] + phone)
         XCTAssertEqual(BoseLink.disconnectPacket(address: phone), [0x04, 0x02, 0x05, 0x06] + phone)
