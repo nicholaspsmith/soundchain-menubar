@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.11.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.12.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -64,6 +64,9 @@ Start at Login is also in **Settings ▸ Start at Login**, or run the installed 
 - Below it, the menu lists every effect in the chain, in order (by its custom
   name when it has one), with a tick when it's on. Click one to switch it on or
   off, as its checkbox in Audio Chain… does; the menu stays open, so you can switch several in one go.
+- Switching an effect on or off, or Bypass, crossfades over 40 ms rather than
+  cutting, so there is no click. (A plugin that was off resumes with stale history
+  and its own latency; cut straight across, that is audible.)
 - **Bypass** turns all processing off; audio passes through untouched. Ticking
   it (or an effect) updates the status line at the top in place.
 - **Settings ▸** holds Start at Login and the running version (StatusItemKit's
