@@ -356,7 +356,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         case .bypassed: state = .bypassed
         case .error: state = .error
         }
-        controller?.setIcon(CharacterIcon.caterpillar(effects: runner.activeCount, state: state, running: runTime))
+        controller?.setIcon(CharacterIcon.caterpillar(effects: runner.activeCount, state: state, running: runTime,
+                                                      headphones: exclusive.isEnabled))
         refreshStatusRows()
     }
 
@@ -410,6 +411,16 @@ final class AppController: NSObject, NSApplicationDelegate {
             reconnect.toolTip = "For when headphones go silent. Saves recent Bluetooth logs to ~/Library/Logs/SoundChain first."
             menu.addItem(reconnect)
         }
+        // Carol wears her headphones while this is on, and round her neck while it is off.
+        menu.addItem(ToggleMenuItem.make(
+            title: "Keep Headphones to This Mac", isOn: exclusive.isEnabled,
+            toolTip: "Bose headphones only. While they are the output, any other device connected to them "
+                + "(your phone) is disconnected, now and every \(Int(BoseExclusive.interval)) seconds, "
+                + "so the radio is not shared and the sound stays clean."
+        ) { [weak self] on in
+            self?.exclusive.isEnabled = on
+            self?.refreshIcon()
+        })
         menu.addItem(.separator())
 
         // The chain itself, in order: a tick means the effect is on. Clicking
@@ -431,20 +442,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         menu.addItem(ToggleMenuItem.make(title: "Bypass", isOn: chain.masterBypass) { [weak self] on in
             self?.setBypass(on)
         })
-        // Settings ▸ holds the one setting that is set and forgotten, then the
-        // shared rows (Start at Login, Version): everything else SoundChain offers
-        // is a control used day to day.
-        SettingsMenu.addFooter(to: menu, appName: "SoundChain", items: { [weak self] settings in
-            guard let self else { return }
-            settings.addItem(ToggleMenuItem.make(
-                title: "Keep Headphones to This Mac", isOn: self.exclusive.isEnabled,
-                toolTip: "Bose headphones only. While they are the output, any other device connected to them "
-                    + "(your phone) is disconnected, now and every \(Int(BoseExclusive.interval)) seconds, "
-                    + "so the radio is not shared and the sound stays clean."
-            ) { [weak self] on in
-                self?.exclusive.isEnabled = on
-            })
-        })
+        // Settings ▸ holds only the shared rows (Start at Login, Version):
+        // everything SoundChain itself offers is a control used day to day.
+        SettingsMenu.addFooter(to: menu, appName: "SoundChain")
     }
 
     private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
