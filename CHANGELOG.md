@@ -7,6 +7,11 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.16.0] - 2026-10-15
+
+- **Bypass takes SoundChain out of the audio path.** It used to switch the effects off while every app's audio still went through SoundChain untouched; now the effects fade out and SoundChain removes its tap and aggregate device, so apps play straight to the output. Unticking Bypass builds them again and fades the effects back in. A quick on-off-on settles for 0.3 s before anything is built or removed, and launching bypassed (including after two crashes in a row) never builds a tap at all. The menu says "Audio goes straight to the output"
+- While bypassed, Carol sleeps instead of walking: grey with her eye shut, breathing, her head nodding, Zs rising over her back, in Polly's dozing manner (StatusItemKit 0.32.0). She sleeps still under Reduce Motion, and the animation pauses while the displays sleep
+
 ## [1.15.2] - 2026-10-15
 
 - Only one SoundChain taps the system's audio. A second copy (opened twice, or parity's launch check of a new build) stands by with a grey Carol and a menu saying another SoundChain is running, and takes over only if it is still open 10 seconds after the first one quits. Two copies tapping the same output, started and stopped within seconds, preceded macOS's audio service hanging on 2026-10-15
