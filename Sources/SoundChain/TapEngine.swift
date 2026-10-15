@@ -69,21 +69,27 @@ final class TapEngine {
     /// output device reports it; 0 until the engine has run.
     private(set) var outputLatency: Double = 0
 
+    /// The last start failed because coreaudiod did not answer (see `CoreAudioHealth`).
+    private(set) var unresponsive = false
+
     /// Builds everything for the current default output and starts audio. On failure
     /// the state is `.failed` and listeners stay installed, so the next device change retries.
     func start() {
+        unresponsive = false
         teardown()
         removeListeners()
         do {
             try build()
         } catch {
             teardown()
+            unresponsive = (error as? CoreAudioError).map { CoreAudioHealth.isUnresponsive($0.status) } ?? false
             state = .failed(error.localizedDescription)
         }
         listen()
     }
 
     func stop() {
+        unresponsive = false
         teardown()
         removeListeners()
         state = .stopped

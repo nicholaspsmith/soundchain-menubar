@@ -11,7 +11,9 @@ import SoundChainCore
 struct CoreAudioError: LocalizedError {
     let what: String
     let status: OSStatus
-    var errorDescription: String? { "\(what) failed (OSStatus \(status))" }
+    var errorDescription: String? {
+        CoreAudioHealth.isUnresponsive(status) ? CoreAudioHealth.message : "\(what) failed (OSStatus \(status))"
+    }
 }
 
 /// Thin wrappers over AudioObjectGet/SetPropertyData. Main thread.
