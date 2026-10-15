@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.13.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.14.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -82,11 +82,16 @@ highlights one of her five segments, counting back from the head. Green means
 processing, grey means bypassed, red means something needs attention (the menu
 says what).
 
-Now and then Carol runs on the spot for a second. When several Menumon
-mascots are running they take turns, a second apart: Archimedes (Claude
-Usage), Menu Pimp (Mac Daddy), Carol (SoundChain), Iguanamous (VPN & DNS),
-then Armonitor (Monitor Lizard), counting only the ones that are running.
-Skipped when Reduce Motion is on.
+While sound is passing through SoundChain, bypassed or not, Carol walks on
+the spot: a hump rolls from her tail to her head, each segment stepping its
+feet forward as it lifts. She starts within a second of the sound and stops
+about a second and a half after it, so a gap between tracks does not stop her.
+
+Now and then Carol runs on the spot for a second (not while she is walking).
+When several Menumon mascots are running they take turns, a second apart:
+Archimedes (Claude Usage), Menu Pimp (Mac Daddy), Carol (SoundChain),
+Iguanamous (VPN & DNS), then Armonitor (Monitor Lizard), counting only the
+ones that are running. Both are skipped when Reduce Motion is on.
 
 ### Virtual outputs and UAD plugins
 
@@ -165,7 +170,8 @@ at all.
 - `SoundChain --taptest 20` runs the real tap with no effects for 20 seconds. Run
   it from the bundle so macOS attributes the permission to SoundChain:
   `open -W --stdout /tmp/tap.log build/SoundChain.app --args --taptest 20`.
-  The callback count stays 0 until some app plays audio (tap auto-start).
+  The callback count stays 0 until some app plays audio (tap auto-start); the
+  count of cycles with sound is what Carol walks to.
 - Diagnose with `log show --predicate 'process == "SoundChain"' --last 10m`.
 
 ## Known limits
