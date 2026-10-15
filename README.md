@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.15.2** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.16.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -67,8 +67,13 @@ Start at Login is also in **Settings ▸ Start at Login**, or run the installed 
 - Switching an effect on or off, or Bypass, crossfades over 40 ms rather than
   cutting, so there is no click. (A plugin that was off resumes with stale history
   and its own latency; cut straight across, that is audible.)
-- **Bypass** turns all processing off; audio passes through untouched. Ticking
-  it (or an effect) updates the status line at the top in place.
+- **Bypass** takes SoundChain out of the audio path altogether: the effects fade
+  out, then its tap and aggregate device are removed, so apps play straight to
+  the output and nothing passes through SoundChain (it can't add a glitch, and
+  can't be in the way if something goes wrong). Unticking it builds them again
+  and fades the effects back in; a quick on-off-on settles for 0.3 s first. The
+  status line says "Audio goes straight to the output". Ticking it (or an effect)
+  updates the status line at the top in place.
 - **Settings ▸** holds Start at Login and the running version (StatusItemKit's
   shared `SettingsMenu`); **Quit SoundChain** (⌘Q) is below it.
 - Settings save to `~/Library/Application Support/SoundChain/chain.json`, including
@@ -84,11 +89,15 @@ says what).
 
 Carol walks to what SoundChain plays: a hump rolls from her tail to her head,
 each segment stepping its feet forward as it lifts, and the louder the output
-(after the effects, bypassed or not) the higher and faster she steps. Quiet
+(after the effects) the higher and faster she steps. Quiet
 passages are a shuffle, a loud chorus is a full stride, and in silence she
 settles and stands. She follows the output's latency, so with Bluetooth
 headphones she keeps time with what you hear rather than stepping ahead of it.
 She goes by the signal SoundChain sends, before the Mac's volume.
+
+While **Bypass** is on she is asleep, grey with her eye shut: she breathes, her
+head nods, and Zs rise over her back, six frames a second in Polly's dozing
+manner (still under Reduce Motion, and parked while the displays sleep).
 
 <p align="center"><img src="docs/animation-walk.png" alt="Carol walking beside a level meter: a shuffle while the music is quiet, full strides when it is loud, then standing still in silence"></p>
 
