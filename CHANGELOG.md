@@ -7,6 +7,12 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.15.0] - 2026-10-15
+
+- Carol walks to the music: the louder SoundChain's output (after the effects), the higher and faster she steps, from a shuffle in quiet passages to a full stride in a loud chorus. She settles and stands in silence, including between tracks, and starts within about a tenth of a second of sound (StatusItemKit 0.31.0)
+- She keeps time with what you hear: her motion is delayed by the output's latency, which matters over Bluetooth headphones
+- `--taptest` reports the loudest output, the output latency and how hard Carol would have walked, instead of the cycles with sound
+
 ## [1.14.0] - 2026-10-15
 
 - Carol walks while sound is passing through SoundChain, bypassed or not: a hump rolls from her tail to her head, each segment stepping its feet forward as it lifts. She starts within a second of the sound and stops about a second and a half after it, so a gap between tracks does not stop her. Her once-a-minute run is skipped while she walks, and both are skipped under Reduce Motion (StatusItemKit 0.30.0)

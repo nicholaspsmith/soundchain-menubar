@@ -34,7 +34,7 @@ final class TapEngine {
 
     private let source: SnapshotSource
     private let callbacks = sc_counter_create()
-    private let audible = sc_counter_create()
+    private let level = sc_level_create()
     private var tapID = AudioObjectID(kAudioObjectUnknown)
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var procID: AudioDeviceIOProcID?
@@ -57,13 +57,17 @@ final class TapEngine {
         teardown()
         removeListeners()
         sc_counter_destroy(callbacks)
-        sc_counter_destroy(audible)
+        sc_level_destroy(level)
     }
 
     /// IO cycles run so far; for --taptest and diagnostics.
     var callbackCount: Int64 { sc_counter_get(callbacks) }
-    /// IO cycles so far that carried sound (see `SoundActivity`); Carol walks while it climbs.
-    var audibleCycles: Int64 { sc_counter_get(audible) }
+    /// The loudest RMS of what SoundChain played in any cycle since the last
+    /// call (see `SoundLevel`); Carol walks to it.
+    func takeLevel() -> Float { sc_level_take(level) }
+    /// Seconds from SoundChain writing a sample to it being heard, as the
+    /// output device reports it; 0 until the engine has run.
+    private(set) var outputLatency: Double = 0
 
     /// Builds everything for the current default output and starts audio. On failure
     /// the state is `.failed` and listeners stay installed, so the next device change retries.
@@ -140,13 +144,14 @@ final class TapEngine {
         let rate = try AudioHW.nominalSampleRate(aggregateID)
         builtBufferFrames = bufferFrames
         builtOutputRate = try? AudioHW.nominalSampleRate(outputDevice)
+        outputLatency = AudioHW.outputLatency(outputDevice)
         onFormat?(RenderFormat(sampleRate: rate, maxFrames: max(Self.minimumMaxFrames, frames)))
 
-        let source = self.source, callbacks = self.callbacks, audible = self.audible
+        let source = self.source, callbacks = self.callbacks, level = self.level
         try AudioHW.check(AudioDeviceCreateIOProcIDWithBlock(&procID, aggregateID, nil) { _, input, inputTime, output, _ in
             sc_counter_increment(callbacks)
             TapEngine.render(source: source, interleaved: interleaved, tapChannels: tapChannels, route: route,
-                             audible: audible, input: input, inputTime: inputTime, output: output)
+                             level: level, input: input, inputTime: inputTime, output: output)
         }, "Installing the audio callback")
         if let procID { Self.useOnlyTapInput(aggregateID, procID) }
         try AudioHW.check(AudioDeviceStart(aggregateID, procID), "Starting audio")
@@ -197,7 +202,7 @@ final class TapEngine {
     /// The IO proc body. No allocation, no locks: the snapshot is used unretained
     /// (it outlives any cycle; see ChainRunner.retireDelay).
     private static func render(source: SnapshotSource, interleaved: Bool, tapChannels: Int, route: StereoRoute,
-                               audible: OpaquePointer, input: UnsafePointer<AudioBufferList>, inputTime: UnsafePointer<AudioTimeStamp>,
+                               level: OpaquePointer, input: UnsafePointer<AudioBufferList>, inputTime: UnsafePointer<AudioTimeStamp>,
                                output: UnsafeMutablePointer<AudioBufferList>) {
         let out = UnsafeMutableAudioBufferListPointer(output)
         source.beginCycle()
@@ -211,12 +216,10 @@ final class TapEngine {
             let frames = TapInput.read(tap, leftChannel: route.leftInTap, rightChannel: route.rightInTap,
                                        left: chain.inputLeft, right: chain.inputRight, capacity: chain.maxFrames)
             guard frames > 0 else { ChannelMap.zero(out); return }
-            // What the apps sent, before any effect: that is the sound passing through.
-            if SoundActivity.isAudible(left: chain.inputLeft, right: chain.inputRight, frames: frames) {
-                sc_counter_increment(audible)
-            }
             let result = chain.process(frames: frames, timestamp: inputTime)
             SampleGuard.sanitize(left: result.left, right: result.right, frames: frames)
+            // What SoundChain actually plays, after the effects: Carol walks to it.
+            sc_level_raise(level, SoundLevel.rms(left: result.left, right: result.right, frames: frames))
             ChannelMap.write(left: result.left, right: result.right, frames: frames, to: out,
                              route: route, passthrough: tap)
         }

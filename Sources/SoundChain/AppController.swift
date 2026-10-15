@@ -25,12 +25,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         self?.runTime = nil
         self?.refreshIcon()
     })
-    /// While sound is passing through, Carol walks on the spot (and skips her
-    /// run). `walk` is nil while she stands; `walkTimer` moves her on each frame.
-    private var activity = SoundActivity()
-    private var walk: CaterpillarWalk?
-    private var walkTimer: Timer?
-    private var lastWalkStep: TimeInterval = 0
+    /// Carol walks to the loudness of what SoundChain plays (and skips her run meanwhile).
+    private lazy var walker = CarolWalker(takeLevel: { [unowned self] in self.engine.takeLevel() },
+                                          latency: { [unowned self] in self.engine.outputLatency })
     /// The image last put in the bar, so a frame that has not changed is not set again.
     private var shownIcon: NSImage?
     private let store = ChainStore(url: ChainStore.defaultURL())
@@ -117,10 +114,16 @@ final class AppController: NSObject, NSApplicationDelegate {
         yieldClient = YieldClient(item: controller)
         yieldClient.start()
         minuteCue = MinuteCue { [weak self] in
-            guard let self, self.walk == nil else { return }
+            guard let self, self.walker.walk == nil else { return }
             self.runAnimation.start()
         }
         minuteCue.start()
+        walker.mayWalk = { [weak self] in
+            guard let self else { return false }
+            return !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && !self.runAnimation.isRunning
+        }
+        walker.onFrame = { [weak self] in self?.refreshGlyph() }
+        walker.start()
 
         installEditMenu()
         runner.onChange = { [weak self] in self?.chainDidChange() }
@@ -202,7 +205,6 @@ final class AppController: NSObject, NSApplicationDelegate {
             lastEditorCapture = Date()
             editors.openSlotIDs.forEach(captureState)
         }
-        updateWalk()
         refreshIcon()
     }
 
@@ -375,38 +377,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         case .error: state = .error
         }
         let icon = CharacterIcon.caterpillar(effects: runner.activeCount, state: state, running: runTime,
-                                             walking: walk, headphones: exclusive.isEnabled)
+                                             walking: walker.walk, headphones: exclusive.isEnabled)
         guard icon !== shownIcon else { return }
         shownIcon = icon
         controller?.setIcon(icon)
-    }
-
-    /// Each tick, and each frame while she walks: Carol walks while sound is
-    /// passing through, bypassed or not, except under Reduce Motion or during
-    /// her run. She eases out and the frame timer stops once she is standing.
-    private func updateWalk() {
-        let now = ProcessInfo.processInfo.systemUptime
-        let walking = activity.update(count: engine.audibleCycles, now: now)
-            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && !runAnimation.isRunning
-        if var current = walk {
-            current.advance(by: now - lastWalkStep, walking: walking)
-            walk = current.isResting && !walking ? nil : current
-        } else if walking {
-            walk = CaterpillarWalk()
-        }
-        lastWalkStep = now
-        if walk == nil {
-            walkTimer?.invalidate()
-            walkTimer = nil
-        } else if walkTimer == nil {
-            let timer = Timer(timeInterval: CaterpillarWalk.frameInterval, repeats: true) { [weak self] _ in
-                self?.updateWalk()
-                self?.refreshGlyph()
-            }
-            // Common modes: she keeps walking while a menu is open.
-            RunLoop.main.add(timer, forMode: .common)
-            walkTimer = timer
-        }
     }
 
     /// The menu's status block: output device (and a warning if it is virtual), what

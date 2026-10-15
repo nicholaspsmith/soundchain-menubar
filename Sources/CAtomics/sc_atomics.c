@@ -56,3 +56,22 @@ void sc_counter_increment(sc_counter *counter) {
 int64_t sc_counter_get(sc_counter *counter) {
     return atomic_load_explicit(&counter->value, memory_order_relaxed);
 }
+
+struct sc_level { _Atomic(float) value; };
+
+sc_level *sc_level_create(void) {
+    sc_level *level = malloc(sizeof *level);
+    atomic_init(&level->value, 0.0f);
+    return level;
+}
+void sc_level_destroy(sc_level *level) { free(level); }
+void sc_level_raise(sc_level *level, float value) {
+    if (!(value > 0.0f)) return;
+    float current = atomic_load_explicit(&level->value, memory_order_relaxed);
+    while (value > current &&
+           !atomic_compare_exchange_weak_explicit(&level->value, &current, value,
+                                                  memory_order_relaxed, memory_order_relaxed)) {}
+}
+float sc_level_take(sc_level *level) {
+    return atomic_exchange_explicit(&level->value, 0.0f, memory_order_relaxed);
+}
