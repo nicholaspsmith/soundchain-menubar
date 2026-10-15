@@ -7,6 +7,10 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.15.1] - 2026-10-15
+
+- Fixed a visual glitch where the Carol menu bar icon was clipped at the top.
+
 ## [1.15.0] - 2026-10-15
 
 - Carol walks to the music: the louder SoundChain's output (after the effects), the higher and faster she steps, from a shuffle in quiet passages to a full stride in a loud chorus. She settles and stands in silence, including between tracks, and starts within about a tenth of a second of sound (StatusItemKit 0.31.0)
