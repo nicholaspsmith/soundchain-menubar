@@ -90,6 +90,8 @@ settles and stands. She follows the output's latency, so with Bluetooth
 headphones she keeps time with what you hear rather than stepping ahead of it.
 She goes by the signal SoundChain sends, before the Mac's volume.
 
+<p align="center"><img src="docs/animation-walk.png" alt="Carol walking beside a level meter: a shuffle while the music is quiet, full strides when it is loud, then standing still in silence"></p>
+
 Now and then Carol runs on the spot for a second (not while she is walking).
 When several Menumon mascots are running they take turns, a second apart:
 Archimedes (Claude Usage), Menu Pimp (Mac Daddy), Carol (SoundChain),
