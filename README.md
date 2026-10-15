@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.15.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.15.2** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -178,6 +178,11 @@ at all.
   The callback count stays 0 until some app plays audio (tap auto-start). It also
   reports the loudest output, the output latency, and how hard Carol would have
   walked to it (her drive, 0 to 1, as percentiles).
+- **macOS audio isn't responding** in the menu means coreaudiod, the system's audio
+  service, has stopped answering, so no app has sound. **Copy Restart Command** copies
+  `sudo killall coreaudiod`; run it in Terminal and SoundChain reconnects by itself.
+- **Another SoundChain is running**: only one copy taps the audio at a time; quit
+  this one.
 - Diagnose with `log show --predicate 'process == "SoundChain"' --last 10m`.
 
 ## Known limits

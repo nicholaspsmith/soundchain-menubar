@@ -7,6 +7,12 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.15.2] - 2026-10-15
+
+- Only one SoundChain taps the system's audio. A second copy (opened twice, or parity's launch check of a new build) stands by with a grey Carol and a menu saying another SoundChain is running, and takes over only if it is still open 10 seconds after the first one quits. Two copies tapping the same output, started and stopped within seconds, preceded macOS's audio service hanging on 2026-10-15
+- SoundChain quits properly when it is sent SIGTERM or SIGINT (parity's launch check, `kill`), removing its own tap and aggregate device instead of leaving them for macOS to clean up; quitting now removes the tap first, before saving plugin settings
+- When macOS's audio service (coreaudiod) stops answering, the menu says "macOS audio isn't responding" and offers **Copy Restart Command** (`sudo killall coreaudiod`), instead of a Retry that froze the menu for 30 seconds. SoundChain checks before each start, off the main thread, and reconnects by itself once the service is back
+
 ## [1.15.1] - 2026-10-15
 
 - Fixed a visual glitch where the Carol menu bar icon was clipped at the top.
