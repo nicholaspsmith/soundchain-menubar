@@ -32,9 +32,10 @@ enum TapTest {
             runner.tick()
             if case .running = engine.state { sawRunning = true }
         }
-        let callbacks = engine.callbackCount
+        let callbacks = engine.callbackCount, audible = engine.audibleCycles
         engine.stop()
         print("IO callbacks: \(callbacks)")
+        print("Cycles with sound: \(audible) (Carol walks while this climbs)")
 
         let ok = me != nil && sawRunning && callbacks > 0
         print(ok ? "Tap test passed." : "Tap test FAILED.")

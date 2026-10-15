@@ -20,11 +20,19 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var runTime: TimeInterval?
     private lazy var runAnimation = IconAnimation(duration: CharacterIcon.caterpillarRunDuration, frame: { [weak self] t in
         self?.runTime = t
-        self?.refreshIcon()
+        self?.refreshGlyph()
     }, completion: { [weak self] in
         self?.runTime = nil
         self?.refreshIcon()
     })
+    /// While sound is passing through, Carol walks on the spot (and skips her
+    /// run). `walk` is nil while she stands; `walkTimer` moves her on each frame.
+    private var activity = SoundActivity()
+    private var walk: CaterpillarWalk?
+    private var walkTimer: Timer?
+    private var lastWalkStep: TimeInterval = 0
+    /// The image last put in the bar, so a frame that has not changed is not set again.
+    private var shownIcon: NSImage?
     private let store = ChainStore(url: ChainStore.defaultURL())
     private let crashGuard = CrashGuard(store: UserDefaults.standard)
     private let blame = CrashBlame(directory: ChainStore.defaultURL().deletingLastPathComponent())
@@ -108,7 +116,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         controller.start()
         yieldClient = YieldClient(item: controller)
         yieldClient.start()
-        minuteCue = MinuteCue { [weak self] in self?.runAnimation.start() }
+        minuteCue = MinuteCue { [weak self] in
+            guard let self, self.walk == nil else { return }
+            self.runAnimation.start()
+        }
         minuteCue.start()
 
         installEditMenu()
@@ -191,6 +202,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             lastEditorCapture = Date()
             editors.openSlotIDs.forEach(captureState)
         }
+        updateWalk()
         refreshIcon()
     }
 
@@ -350,15 +362,51 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var uadWarning: String? { UADCheck.warning(chain: chain, hardwarePresent: uad.isPresent) }
 
     private func refreshIcon() {
+        refreshGlyph()
+        refreshStatusRows()
+    }
+
+    /// Just the icon, for animation frames.
+    private func refreshGlyph() {
         let state: CaterpillarState
         switch health {
         case .processing: state = .processing
         case .bypassed: state = .bypassed
         case .error: state = .error
         }
-        controller?.setIcon(CharacterIcon.caterpillar(effects: runner.activeCount, state: state, running: runTime,
-                                                      headphones: exclusive.isEnabled))
-        refreshStatusRows()
+        let icon = CharacterIcon.caterpillar(effects: runner.activeCount, state: state, running: runTime,
+                                             walking: walk, headphones: exclusive.isEnabled)
+        guard icon !== shownIcon else { return }
+        shownIcon = icon
+        controller?.setIcon(icon)
+    }
+
+    /// Each tick, and each frame while she walks: Carol walks while sound is
+    /// passing through, bypassed or not, except under Reduce Motion or during
+    /// her run. She eases out and the frame timer stops once she is standing.
+    private func updateWalk() {
+        let now = ProcessInfo.processInfo.systemUptime
+        let walking = activity.update(count: engine.audibleCycles, now: now)
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && !runAnimation.isRunning
+        if var current = walk {
+            current.advance(by: now - lastWalkStep, walking: walking)
+            walk = current.isResting && !walking ? nil : current
+        } else if walking {
+            walk = CaterpillarWalk()
+        }
+        lastWalkStep = now
+        if walk == nil {
+            walkTimer?.invalidate()
+            walkTimer = nil
+        } else if walkTimer == nil {
+            let timer = Timer(timeInterval: CaterpillarWalk.frameInterval, repeats: true) { [weak self] _ in
+                self?.updateWalk()
+                self?.refreshGlyph()
+            }
+            // Common modes: she keeps walking while a menu is open.
+            RunLoop.main.add(timer, forMode: .common)
+            walkTimer = timer
+        }
     }
 
     /// The menu's status block: output device (and a warning if it is virtual), what
