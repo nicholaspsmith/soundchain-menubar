@@ -33,6 +33,16 @@ void sc_counter_destroy(sc_counter *counter);
 void sc_counter_increment(sc_counter *counter);
 int64_t sc_counter_get(sc_counter *counter);
 
+/// The loudest level since it was last read: the audio thread raises it, the
+/// main thread takes it (and so resets it to 0).
+typedef struct sc_level sc_level;
+sc_level *sc_level_create(void);
+void sc_level_destroy(sc_level *level);
+/// Raises the held level to `value` if that is higher. Ignores values that are not positive (and NaN).
+void sc_level_raise(sc_level *level, float value);
+/// Returns the highest level raised since the last take, and resets it to 0.
+float sc_level_take(sc_level *level);
+
 #pragma clang assume_nonnull end
 
 #endif

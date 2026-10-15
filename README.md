@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.14.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.15.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -82,10 +82,13 @@ highlights one of her five segments, counting back from the head. Green means
 processing, grey means bypassed, red means something needs attention (the menu
 says what).
 
-While sound is passing through SoundChain, bypassed or not, Carol walks on
-the spot: a hump rolls from her tail to her head, each segment stepping its
-feet forward as it lifts. She starts within a second of the sound and stops
-about a second and a half after it, so a gap between tracks does not stop her.
+Carol walks to what SoundChain plays: a hump rolls from her tail to her head,
+each segment stepping its feet forward as it lifts, and the louder the output
+(after the effects, bypassed or not) the higher and faster she steps. Quiet
+passages are a shuffle, a loud chorus is a full stride, and in silence she
+settles and stands. She follows the output's latency, so with Bluetooth
+headphones she keeps time with what you hear rather than stepping ahead of it.
+She goes by the signal SoundChain sends, before the Mac's volume.
 
 Now and then Carol runs on the spot for a second (not while she is walking).
 When several Menumon mascots are running they take turns, a second apart:
@@ -170,8 +173,9 @@ at all.
 - `SoundChain --taptest 20` runs the real tap with no effects for 20 seconds. Run
   it from the bundle so macOS attributes the permission to SoundChain:
   `open -W --stdout /tmp/tap.log build/SoundChain.app --args --taptest 20`.
-  The callback count stays 0 until some app plays audio (tap auto-start); the
-  count of cycles with sound is what Carol walks to.
+  The callback count stays 0 until some app plays audio (tap auto-start). It also
+  reports the loudest output, the output latency, and how hard Carol would have
+  walked to it (her drive, 0 to 1, as percentiles).
 - Diagnose with `log show --predicate 'process == "SoundChain"' --last 10m`.
 
 ## Known limits

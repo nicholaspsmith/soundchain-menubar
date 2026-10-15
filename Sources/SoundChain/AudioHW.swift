@@ -104,6 +104,32 @@ enum AudioHW {
         try get(device, kAudioDevicePropertyBufferFrameSize, initial: UInt32(0), what: "Reading the buffer size")
     }
 
+    /// Seconds from a sample being written to the device to it being heard, as the
+    /// device reports it: its latency and safety offset, its buffer, and its first
+    /// output stream's latency. Bluetooth headphones report a few hundred ms; 0 if
+    /// the rate cannot be read.
+    static func outputLatency(_ device: AudioObjectID) -> Double {
+        func frames(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector,
+                    _ scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> UInt32 {
+            var address = addr(selector, scope)
+            var value: UInt32 = 0
+            var size = UInt32(MemoryLayout<UInt32>.size)
+            return AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value) == noErr ? value : 0
+        }
+        let output = kAudioObjectPropertyScopeOutput
+        var total = frames(device, kAudioDevicePropertyLatency, output)
+            + frames(device, kAudioDevicePropertySafetyOffset, output)
+            + frames(device, kAudioDevicePropertyBufferFrameSize)
+        var address = addr(kAudioDevicePropertyStreams, output)
+        var stream = AudioObjectID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        if AudioObjectGetPropertyData(device, &address, 0, nil, &size, &stream) == noErr, size > 0 {
+            total += frames(stream, kAudioStreamPropertyLatency)
+        }
+        guard let rate = try? nominalSampleRate(device), rate > 0 else { return 0 }
+        return Double(total) / rate
+    }
+
     static func setBufferFrameSize(_ device: AudioObjectID, _ frames: UInt32) throws {
         var address = addr(kAudioDevicePropertyBufferFrameSize)
         var value = frames
