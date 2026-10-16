@@ -7,6 +7,10 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.17.0] - 2026-10-15
+
+- The owl icon in the menu bar now supports custom pupil colors, allowing you to choose a color instead of the default green-to-red gradient.
+
 ## [1.16.0] - 2026-10-15
 
 - **Bypass takes SoundChain out of the audio path.** It used to switch the effects off while every app's audio still went through SoundChain untouched; now the effects fade out and SoundChain removes its tap and aggregate device, so apps play straight to the output. Unticking Bypass builds them again and fades the effects back in. A quick on-off-on settles for 0.3 s before anything is built or removed, and launching bypassed (including after two crashes in a row) never builds a tap at all. The menu says "Audio goes straight to the output"
