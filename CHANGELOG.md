@@ -7,6 +7,10 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.18.0] - 2026-10-20
+
+- SoundChain's menu bar icon now updates more smoothly with significantly less impact on system performance.
+
 ## [1.17.0] - 2026-10-15
 
 - The owl icon in the menu bar now supports custom pupil colors, allowing you to choose a color instead of the default green-to-red gradient.
