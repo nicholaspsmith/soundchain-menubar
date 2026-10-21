@@ -7,6 +7,10 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.19.0] - 2026-10-20
+
+- Engine rebuilds are logged (subsystem `com.nicholaspsmith.SoundChain`, category `engine`): the trigger, the output device's state, the tap and aggregate made, per-step timings, IO callbacks 3 s later, and which apps were playing to which devices. For tracking down doubled audio after an Apollo dropped out and was restarted.
+
 ## [1.18.1] - 2026-10-20
 
 - `install.sh` now hands the install to parity on a Mac parity syncs, instead of building a second copy of the app that macOS could launch in place of parity's. `PARITY=off ./install.sh` still builds it locally.

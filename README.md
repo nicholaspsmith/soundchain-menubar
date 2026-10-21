@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.18.1** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.19.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -193,6 +193,12 @@ at all.
 - **Another SoundChain is running**: only one copy taps the audio at a time; quit
   this one.
 - Diagnose with `log show --predicate 'process == "SoundChain"' --last 10m`.
+- Every audio-engine rebuild is logged: what triggered it (device change, wake,
+  sample rate), the output device's state, the tap and aggregate it made, how long
+  each step took, IO callbacks 3 s later, and which apps were playing to which
+  devices. If audio sounds doubled or echoey after an output drops and comes back,
+  read the rebuild around that time:
+  `/usr/bin/log show --predicate 'subsystem == "com.nicholaspsmith.SoundChain"' --info --last 1h`.
 
 ## Known limits
 
