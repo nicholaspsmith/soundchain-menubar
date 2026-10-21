@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.8.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.19.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -64,8 +64,16 @@ Start at Login is also in **Settings ▸ Start at Login**, or run the installed 
 - Below it, the menu lists every effect in the chain, in order (by its custom
   name when it has one), with a tick when it's on. Click one to switch it on or
   off, as its checkbox in Audio Chain… does; the menu stays open, so you can switch several in one go.
-- **Bypass** turns all processing off; audio passes through untouched. Ticking
-  it (or an effect) updates the status line at the top in place.
+- Switching an effect on or off, or Bypass, crossfades over 40 ms rather than
+  cutting, so there is no click. (A plugin that was off resumes with stale history
+  and its own latency; cut straight across, that is audible.)
+- **Bypass** takes SoundChain out of the audio path altogether: the effects fade
+  out, then its tap and aggregate device are removed, so apps play straight to
+  the output and nothing passes through SoundChain (it can't add a glitch, and
+  can't be in the way if something goes wrong). Unticking it builds them again
+  and fades the effects back in; a quick on-off-on settles for 0.3 s first. The
+  status line says "Audio goes straight to the output". Ticking it (or an effect)
+  updates the status line at the top in place.
 - **Settings ▸** holds Start at Login and the running version (StatusItemKit's
   shared `SettingsMenu`); **Quit SoundChain** (⌘Q) is below it.
 - Settings save to `~/Library/Application Support/SoundChain/chain.json`, including
@@ -79,11 +87,25 @@ highlights one of her five segments, counting back from the head. Green means
 processing, grey means bypassed, red means something needs attention (the menu
 says what).
 
-Now and then Carol runs on the spot for a second. When several Menumon
-mascots are running they take turns, a second apart: Archimedes (Claude
-Usage), Menu Pimp (Mac Daddy), Carol (SoundChain), Iguanamous (VPN & DNS),
-then Armonitor (Monitor Lizard), counting only the ones that are running.
-Skipped when Reduce Motion is on.
+Carol walks to what SoundChain plays: a hump rolls from her tail to her head,
+each segment stepping its feet forward as it lifts, and the louder the output
+(after the effects) the higher and faster she steps. Quiet
+passages are a shuffle, a loud chorus is a full stride, and in silence she
+settles and stands. She follows the output's latency, so with Bluetooth
+headphones she keeps time with what you hear rather than stepping ahead of it.
+She goes by the signal SoundChain sends, before the Mac's volume.
+
+While **Bypass** is on she is asleep, grey with her eye shut: she breathes, her
+head nods, and Zs rise over her back, six frames a second in Polly's dozing
+manner (still under Reduce Motion, and parked while the displays sleep).
+
+<p align="center"><img src="docs/animation-walk.png" alt="Carol walking beside a level meter: a shuffle while the music is quiet, full strides when it is loud, then standing still in silence"></p>
+
+Now and then Carol runs on the spot for a second (not while she is walking).
+When several Menumon mascots are running they take turns, a second apart:
+Archimedes (Claude Usage), Menu Pimp (Mac Daddy), Carol (SoundChain),
+Iguanamous (VPN & DNS), then Armonitor (Monitor Lizard), counting only the
+ones that are running. Both are skipped when Reduce Motion is on.
 
 ### Virtual outputs and UAD plugins
 
@@ -109,6 +131,17 @@ current output is Bluetooth, the menu has **Reconnect <name>**, which does exact
 that. It first saves the last 5 minutes of Bluetooth and audio logs to
 `~/Library/Logs/SoundChain/bluetooth-<name>-<time>.log`, so a recurring cause can
 be tracked down later. The first use asks for Bluetooth access.
+
+### Crackle from a phone on Bose headphones
+
+Bose headphones connect to two devices at once (multipoint) and share one radio
+between them, so a phone that is connected but playing nothing can turn the Mac's
+audio into continuous crackle. **Keep Headphones to This Mac** in the menu (off by
+default; Carol wears her headphones round her neck while it is off) asks the headphones, in the Bose app's own protocol, to drop every other
+device while they are the Mac's output, now and every 30 seconds, since a phone
+reconnects on its own. The menu says who was dropped ("Dropped Magooberstein from
+Osiris"). Works with any Bose headset the Bose app can manage (QuietComfort 35 II
+and later); other headphones are left alone and the menu says so.
 
 ## Pinned effects
 
@@ -151,7 +184,14 @@ at all.
 - `SoundChain --taptest 20` runs the real tap with no effects for 20 seconds. Run
   it from the bundle so macOS attributes the permission to SoundChain:
   `open -W --stdout /tmp/tap.log build/SoundChain.app --args --taptest 20`.
-  The callback count stays 0 until some app plays audio (tap auto-start).
+  The callback count stays 0 until some app plays audio (tap auto-start). It also
+  reports the loudest output, the output latency, and how hard Carol would have
+  walked to it (her drive, 0 to 1, as percentiles).
+- **macOS audio isn't responding** in the menu means coreaudiod, the system's audio
+  service, has stopped answering, so no app has sound. **Copy Restart Command** copies
+  `sudo killall coreaudiod`; run it in Terminal and SoundChain reconnects by itself.
+- **Another SoundChain is running**: only one copy taps the audio at a time; quit
+  this one.
 - Diagnose with `log show --predicate 'process == "SoundChain"' --last 10m`.
 - Every audio-engine rebuild is logged: what triggered it (device change, wake,
   sample rate), the output device's state, the tap and aggregate it made, how long

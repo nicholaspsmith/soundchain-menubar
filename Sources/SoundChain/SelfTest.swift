@@ -61,6 +61,24 @@ enum SelfTest {
         let (fl, _) = render(full, blocks: 1, frames: format.maxFrames)
         check(fl.count == format.maxFrames && fl.allSatisfy(\.isFinite), "renders a full maxFrames block")
 
+        // Ramps: a stage switched on starts dry and ends wet; one switched off
+        // starts wet and is a bit-exact bypass once the ramp is over.
+        let ramp = blockFrames / 2
+        let rampIn = RenderChain(stages: [(slotID: UUID(), unit: delayPlugin.unit, ramp: .in)],
+                                 maxFrames: format.maxFrames, rampFrames: ramp)
+        let (inFirst, _) = render(rampIn, blocks: 1)
+        let dry = sine(block: 0)
+        check(abs(inFirst[0] - dry[0]) < 0.01 && inFirst[ramp...] != dry[ramp...],
+              "a stage ramping in starts dry and ends wet")
+        check(rampIn.stageCount == 1 && rampIn.slotIDs.count == 1, "a stage ramping in counts as on")
+        let rampOut = RenderChain(stages: [(slotID: UUID(), unit: delayPlugin.unit, ramp: .out)],
+                                  maxFrames: format.maxFrames, rampFrames: ramp)
+        let (outFirst, _) = render(rampOut, blocks: 1)
+        check(outFirst[ramp...] == dry[ramp...] && outFirst[..<ramp] != dry[..<ramp],
+              "a stage ramping out ends dry within the ramp")
+        check(render(rampOut, blocks: 1).0 == dry, "a stage that has ramped out is a bit-exact bypass")
+        check(rampOut.stageCount == 0 && rampOut.slotIDs.isEmpty, "a stage ramping out is not counted as on")
+
         // State capture and restore, through AUDelay's wet/dry mix (parameter address 0).
         guard let mix = delayPlugin.unit.parameterTree?.parameter(withAddress: 0) else {
             check(false, "AUDelay exposes wet/dry mix at address 0")
@@ -106,7 +124,10 @@ enum SelfTest {
         check(runner.activeCount == 0, "master bypass runs no effects")
         if let raw = runner.source.load() {
             let live = Unmanaged<RenderChain>.fromOpaque(raw).takeUnretainedValue()
-            check(render(live, blocks: 2).0 == sine(block: 1), "master bypass passes audio through")
+            // The effects ramp out first (Crossfade.duration), then it is a bit-exact bypass.
+            let rampBlocks = Crossfade(sampleRate: sampleRate).length / blockFrames + 1
+            check(render(live, blocks: 1).0 != sine(block: 0), "master bypass ramps the effects out")
+            check(render(live, blocks: rampBlocks).0 == sine(block: rampBlocks - 1), "master bypass passes audio through")
         } else {
             check(false, "a snapshot is published")
         }

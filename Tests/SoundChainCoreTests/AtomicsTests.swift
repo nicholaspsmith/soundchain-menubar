@@ -45,4 +45,26 @@ final class AtomicsTests: XCTestCase {
         for _ in 0..<5 { sc_counter_increment(counter) }
         XCTAssertEqual(sc_counter_get(counter), 5)
     }
+
+    // The audio thread raises it; the main thread takes the loudest since it last looked.
+    func testLevelHoldsTheHighestUntilTaken() {
+        let level = sc_level_create()
+        defer { sc_level_destroy(level) }
+        XCTAssertEqual(sc_level_take(level), 0)
+        sc_level_raise(level, 0.2)
+        sc_level_raise(level, 0.5)
+        sc_level_raise(level, 0.3)
+        XCTAssertEqual(sc_level_take(level), 0.5)
+        XCTAssertEqual(sc_level_take(level), 0)
+        sc_level_raise(level, 0.1)
+        XCTAssertEqual(sc_level_take(level), 0.1)
+    }
+
+    func testLevelIgnoresNegativeAndNaN() {
+        let level = sc_level_create()
+        defer { sc_level_destroy(level) }
+        sc_level_raise(level, -1)
+        sc_level_raise(level, .nan)
+        XCTAssertEqual(sc_level_take(level), 0)
+    }
 }

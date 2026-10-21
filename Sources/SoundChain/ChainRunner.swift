@@ -215,21 +215,27 @@ final class ChainRunner {
     /// go out: no newly loaded plugin goes live while another is still loading, so a
     /// crash in one plugin's render is never blamed on the one loading. The full swap
     /// waits until the queue drains.
+    ///
+    /// A stage new to the snapshot ramps in; one that was on and no longer is stays
+    /// for this snapshot to ramp out (RenderChain.Ramp), so switching never clicks.
     private func publish() {
         guard let format else { onChange?(); return }
         let busy = isBusyLoading
         publishPending = busy
         let live = Set(current?.slotIDs ?? [])
-        let stages: [(slotID: UUID, unit: AUAudioUnit)] = chain.masterBypass ? [] : chain.slots.compactMap { slot in
-            guard !slot.bypassed, renderErrors[slot.id] == nil, let plugin = plugins[slot.id],
-                  !busy || live.contains(slot.id) else { return nil }
-            return (slotID: slot.id, unit: plugin.unit)
+        let stages: [RenderChain.Stage] = chain.slots.compactMap { slot in
+            guard renderErrors[slot.id] == nil, let plugin = plugins[slot.id] else { return nil }
+            let wasOn = live.contains(slot.id)
+            let on = !chain.masterBypass && !slot.bypassed && (!busy || wasOn)
+            if on { return (slotID: slot.id, unit: plugin.unit, ramp: wasOn ? .none : .in) }
+            return wasOn ? (slotID: slot.id, unit: plugin.unit, ramp: .out) : nil
         }
-        if busy, stages.map(\.slotID) == current?.slotIDs ?? [] {
+        if busy, stages.filter({ $0.ramp != .out }).map(\.slotID) == current?.slotIDs ?? [] {
             onChange?()
             return
         }
-        let next = RenderChain(stages: stages, maxFrames: format.maxFrames)
+        let next = RenderChain(stages: stages, maxFrames: format.maxFrames,
+                               rampFrames: Crossfade(sampleRate: format.sampleRate).length)
         retire(source.swap(next))
         current = next
         onChange?()

@@ -7,11 +7,70 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
-## [Unreleased]
+## [1.19.0] - 2026-10-20
 
-### Added
+- Engine rebuilds are logged (subsystem `com.nicholaspsmith.SoundChain`, category `engine`): the trigger, the output device's state, the tap and aggregate made, per-step timings, IO callbacks 3 s later, and which apps were playing to which devices. For tracking down doubled audio after an Apollo dropped out and was restarted.
 
-- Engine rebuilds are logged (subsystem `com.nicholaspsmith.SoundChain`, category `engine`): the trigger, the output device's state, the tap and aggregate made, per-step timings, IO callbacks 3 s later, and which apps were playing to which devices. For tracking down doubled audio after an Apollo dropped out and was restarted
+## [1.18.1] - 2026-10-20
+
+- `install.sh` now hands the install to parity on a Mac parity syncs, instead of building a second copy of the app that macOS could launch in place of parity's. `PARITY=off ./install.sh` still builds it locally.
+
+## [1.18.0] - 2026-10-20
+
+- SoundChain's menu bar icon now updates more smoothly with significantly less impact on system performance.
+
+## [1.17.0] - 2026-10-15
+
+- The owl icon in the menu bar now supports custom pupil colors, allowing you to choose a color instead of the default green-to-red gradient.
+
+## [1.16.0] - 2026-10-15
+
+- **Bypass takes SoundChain out of the audio path.** It used to switch the effects off while every app's audio still went through SoundChain untouched; now the effects fade out and SoundChain removes its tap and aggregate device, so apps play straight to the output. Unticking Bypass builds them again and fades the effects back in. A quick on-off-on settles for 0.3 s before anything is built or removed, and launching bypassed (including after two crashes in a row) never builds a tap at all. The menu says "Audio goes straight to the output"
+- While bypassed, Carol sleeps instead of walking: grey with her eye shut, breathing, her head nodding, Zs rising over her back, in Polly's dozing manner (StatusItemKit 0.32.0). She sleeps still under Reduce Motion, and the animation pauses while the displays sleep
+
+## [1.15.2] - 2026-10-15
+
+- Only one SoundChain taps the system's audio. A second copy (opened twice, or parity's launch check of a new build) stands by with a grey Carol and a menu saying another SoundChain is running, and takes over only if it is still open 10 seconds after the first one quits. Two copies tapping the same output, started and stopped within seconds, preceded macOS's audio service hanging on 2026-10-15
+- SoundChain quits properly when it is sent SIGTERM or SIGINT (parity's launch check, `kill`), removing its own tap and aggregate device instead of leaving them for macOS to clean up; quitting now removes the tap first, before saving plugin settings
+- When macOS's audio service (coreaudiod) stops answering, the menu says "macOS audio isn't responding" and offers **Copy Restart Command** (`sudo killall coreaudiod`), instead of a Retry that froze the menu for 30 seconds. SoundChain checks before each start, off the main thread, and reconnects by itself once the service is back
+
+## [1.15.1] - 2026-10-15
+
+- Fixed a visual glitch where the Carol menu bar icon was clipped at the top.
+
+## [1.15.0] - 2026-10-15
+
+- Carol walks to the music: the louder SoundChain's output (after the effects), the higher and faster she steps, from a shuffle in quiet passages to a full stride in a loud chorus. She settles and stands in silence, including between tracks, and starts within about a tenth of a second of sound (StatusItemKit 0.31.0)
+- She keeps time with what you hear: her motion is delayed by the output's latency, which matters over Bluetooth headphones
+- `--taptest` reports the loudest output, the output latency and how hard Carol would have walked, instead of the cycles with sound
+
+## [1.14.0] - 2026-10-15
+
+- Carol walks while sound is passing through SoundChain, bypassed or not: a hump rolls from her tail to her head, each segment stepping its feet forward as it lifts. She starts within a second of the sound and stops about a second and a half after it, so a gap between tracks does not stop her. Her once-a-minute run is skipped while she walks, and both are skipped under Reduce Motion (StatusItemKit 0.30.0)
+- `--taptest` also reports how many cycles carried sound
+
+## [1.13.0] - 2026-10-09
+
+- **Keep Headphones to This Mac** moves out of Settings ▸ into the main menu, under the output rows
+- Carol shows it: with it off, she wears her headphones round her neck (StatusItemKit 0.29.0)
+
+## [1.12.0] - 2026-10-09
+
+- Switching an effect on or off no longer clicks: the effect's signal is crossfaded in or out over 40 ms instead of cut in. The same goes for Bypass, for adding or removing an effect, and for the first moment after SoundChain starts
+- Fix: Settings ▸ Keep Headphones to This Mac could report that the headphones wouldn't drop the phone when they were still about to; it now waits for their answer
+
+## [1.11.0] - 2026-10-08
+
+- Settings ▸ **Keep Headphones to This Mac** (Bose headphones, off by default): while they are the output, any other device connected to them, usually your phone, is disconnected from them, now and every 30 seconds. Bose headphones share their radio between two sources (multipoint), and a phone that is merely connected, playing nothing, turns the Mac's audio into continuous crackle. The menu says who was dropped, e.g. "Dropped Magooberstein from Osiris"
+- Works with any Bose headset that takes commands from the Bose app (QuietComfort 35 II and later); other headphones are left alone and the menu says so. If the headphones' controls stop answering, the menu says to turn them off and on
+
+## [1.10.0] - 2026-10-08
+
+- No user-visible changes.
+
+## [1.9.0] - 2026-10-07
+
+- No user-visible changes.
 
 ## [1.8.0] - 2026-10-06
 

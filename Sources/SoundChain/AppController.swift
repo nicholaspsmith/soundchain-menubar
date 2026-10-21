@@ -20,11 +20,47 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var runTime: TimeInterval?
     private lazy var runAnimation = IconAnimation(duration: CharacterIcon.caterpillarRunDuration, frame: { [weak self] t in
         self?.runTime = t
-        self?.refreshIcon()
+        self?.refreshGlyph()
     }, completion: { [weak self] in
         self?.runTime = nil
         self?.refreshIcon()
     })
+    /// Carol walks to the loudness of what SoundChain plays (and skips her run meanwhile).
+    private lazy var walker = CarolWalker(takeLevel: { [unowned self] in self.engine.takeLevel() },
+                                          latency: { [unowned self] in self.engine.outputLatency })
+    /// The image last put in the bar, so a frame that has not changed is not set again.
+    private var shownIcon: NSImage?
+    /// Set while another SoundChain runs the audio (see `InstanceElection`): this copy
+    /// shows a menu saying so and touches nothing else.
+    private var standby = false
+    private var standbyObserver: NSObjectProtocol?
+    /// How long a copy standing by waits, once the active one has quit, before it
+    /// takes over: longer than parity's launch check lets its copy live, so that
+    /// copy never builds a tap.
+    static let takeOverDelay: TimeInterval = 10
+    private var signalSources: [DispatchSourceSignal] = []
+    /// Asks coreaudiod something trivial, off the main thread, before each engine
+    /// start, so a hung coreaudiod shows in the menu instead of freezing it.
+    private let audioProbe = TimedProbe(timeout: 3) { _ = try? AudioHW.defaultOutputDevice() }
+    private var probeUnanswered = false
+    /// How often `tick` tries again while coreaudiod is not answering: a start that
+    /// gets past the probe can still wait 30 s on a hung call, so not every tick.
+    static let unresponsiveRetryInterval: TimeInterval = 15
+    private var lastAutomaticStart = Date.distantPast
+    /// coreaudiod has stopped answering; `tick` keeps asking and restarts the
+    /// engine once it does.
+    private var audioUnresponsive: Bool { probeUnanswered || engine.unresponsive }
+    /// Bypass takes SoundChain out of the audio path: no tap, no aggregate device,
+    /// apps play straight to the output. It is applied this long after the last
+    /// change, once the effects have faded out, and so that a quick on-off-on does
+    /// not build and tear down taps (churn that preceded coreaudiod hanging).
+    static let routingDelay: TimeInterval = 0.3
+    private var routingWork: DispatchWorkItem?
+    /// While bypassed Carol sleeps; this moves her on a frame at a time. It is
+    /// parked while the displays sleep, and under Reduce Motion she sleeps still.
+    private var sleepTimer: Timer?
+    private var sleepStart: TimeInterval = 0
+    private var displaysAsleep = false
     private let store = ChainStore(url: ChainStore.defaultURL())
     private let crashGuard = CrashGuard(store: UserDefaults.standard)
     private let blame = CrashBlame(directory: ChainStore.defaultURL().deletingLastPathComponent())
@@ -38,6 +74,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private let runner = ChainRunner()
     private let uad = UADHardware()
     private let bluetooth = BluetoothReconnect()
+    private let exclusive = BoseExclusive()
     private lazy var engine = TapEngine(source: runner.source)
     private(set) var chain = Chain()
     /// A one-off message for the menu (corrupt chain file, crash-loop bypass, save failure).
@@ -68,6 +105,26 @@ final class AppController: NSObject, NSApplicationDelegate {
     // MARK: Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        installSignalHandlers()
+        controller = StatusItemController(
+            pollInterval: 1,
+            onPoll: { [weak self] in
+                guard let self, !self.standby else { return }
+                self.tick()
+            },
+            onBuildMenu: { [weak self] menu in
+                guard let self else { return }
+                if self.standby { self.buildStandbyMenu(menu) } else { self.buildMenu(menu) }
+            }
+        )
+        controller.start()
+        yieldClient = YieldClient(item: controller)
+        yieldClient.start()
+        if Self.isActiveCopy() { startUp() } else { enterStandby() }
+    }
+
+    /// Everything a running SoundChain does, from loading the chain to starting audio.
+    private func startUp() {
         let startBypassed = crashGuard.recordLaunch()
         let loaded = store.load()
         chain = loaded.chain
@@ -99,16 +156,26 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in self?.crashGuard.markStable() }
 
-        controller = StatusItemController(
-            pollInterval: 1,
-            onPoll: { [weak self] in self?.tick() },
-            onBuildMenu: { [weak self] menu in self?.buildMenu(menu) }
-        )
-        controller.start()
-        yieldClient = YieldClient(item: controller)
-        yieldClient.start()
-        minuteCue = MinuteCue { [weak self] in self?.runAnimation.start() }
+        minuteCue = MinuteCue { [weak self] in
+            guard let self, self.walker.walk == nil, !self.asleep else { return }
+            self.runAnimation.start()
+        }
         minuteCue.start()
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.displaysAsleep = true
+            self?.refreshGlyph()
+        }
+        workspace.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.displaysAsleep = false
+            self?.refreshGlyph()
+        }
+        walker.mayWalk = { [weak self] in
+            guard let self else { return false }
+            return !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && !self.runAnimation.isRunning
+        }
+        walker.onFrame = { [weak self] in self?.refreshGlyph() }
+        walker.start()
 
         installEditMenu()
         runner.onChange = { [weak self] in self?.chainDidChange() }
@@ -116,14 +183,21 @@ final class AppController: NSObject, NSApplicationDelegate {
         runner.willStep = { [blame] id, step in blame.begin(id, step: step) }
         runner.didStep = { [blame] id, step in blame.end(id, step: step) }
         engine.onFormat = { [weak self] format in self?.runner.setFormat(format) }
-        engine.onStateChange = { [weak self] _ in self?.refreshIcon() }
+        engine.onStateChange = { [weak self] _ in
+            self?.refreshIcon()
+            self?.exclusive.outputChanged()
+        }
         runner.isSuspended = { [uad] slot in !uad.isPresent && UADCheck.needsHardware(slot) }
         uad.onChange = { [weak self] in self?.uadHardwareChanged() }
         uad.start()
         bluetooth.onFinish = { [weak self] result in
             self?.notice = result
             self?.refreshIcon()
+            self?.exclusive.outputChanged()
         }
+        exclusive.isBusy = { [bluetooth] in bluetooth.inProgress }
+        exclusive.onChange = { [weak self] in self?.refreshIcon() }
+        exclusive.outputChanged()
         runner.sync(to: chain)
         startAudio()
         editors.onClose = { [weak self] id in self?.captureState(id) }
@@ -137,20 +211,81 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // A copy standing by touched nothing, so has nothing to put back or save.
+        guard !standby else { return }
+        // The tap goes first: however long the rest takes (a plugin slow to hand over
+        // its settings), SoundChain removes it itself rather than leave it to
+        // coreaudiod after a SIGKILL.
+        engine.stop()
+        exclusive.stop()
         editors.closeAll(notify: false)
         for slot in chain.slots {
             if let data = captureStateBlocking(slot.id) { chain.setState(data, id: slot.id) }
         }
         save()
-        engine.stop()
         crashGuard.recordCleanExit()
     }
 
+    /// SIGTERM (parity's launch check, `kill`) and SIGINT quit the way Quit does, so
+    /// the tap and aggregate device are torn down by SoundChain, not by coreaudiod
+    /// cleaning up after a dead process.
+    private func installSignalHandlers() {
+        for number in [SIGTERM, SIGINT] {
+            signal(number, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
+            source.setEventHandler { NSApp.terminate(nil) }
+            source.resume()
+            signalSources.append(source)
+        }
+    }
+
+    // MARK: One copy at a time
+
+    /// Whether this copy runs the audio: the earliest launched of the running copies.
+    private static func isActiveCopy() -> Bool {
+        func instance(_ app: NSRunningApplication) -> AppInstance {
+            AppInstance(pid: app.processIdentifier, launched: app.launchDate)
+        }
+        let copies = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+        return InstanceElection.isActive(instance(.current), among: copies.filter { !$0.isTerminated }.map(instance))
+    }
+
+    /// Another SoundChain has the audio: show a grey Carol and a menu saying so, and
+    /// take over only if this copy is still running `takeOverDelay` after it quits.
+    private func enterStandby() {
+        standby = true
+        controller.setIcon(CharacterIcon.caterpillar(effects: 0, state: .bypassed))
+        standbyObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            guard app?.bundleIdentifier == Bundle.main.bundleIdentifier else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.takeOverDelay) {
+                guard let self, self.standby, Self.isActiveCopy() else { return }
+                if let observer = self.standbyObserver { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+                self.standbyObserver = nil
+                self.standby = false
+                self.startUp()
+            }
+        }
+    }
+
+    private func buildStandbyMenu(_ menu: NSMenu) {
+        menu.addItem(disabled("Another SoundChain is running"))
+        menu.addItem(disabled("This copy stays out of the audio"))
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+    }
+
+    // MARK: Starting audio
+
     private func startAudio() {
+        // Bypassed, SoundChain stays out of the audio path, so there is nothing to start.
+        guard !chain.masterBypass else { refreshIcon(); return }
         switch AudioPermission.status() {
         case .authorized:
             permissionDenied = false
-            engine.start()
+            startEngine()
         case .denied:
             permissionDenied = true
             refreshIcon()
@@ -158,12 +293,30 @@ final class AppController: NSObject, NSApplicationDelegate {
             AudioPermission.request { [weak self] granted in
                 guard let self else { return }
                 self.permissionDenied = !granted
-                if granted { self.engine.start() } else { self.refreshIcon() }
+                if granted { self.startEngine() } else { self.refreshIcon() }
             }
         }
     }
 
+    /// Starts the engine once coreaudiod has answered the probe. If it does not
+    /// answer in time the menu says so, and `tick` asks again until it does.
+    private func startEngine() {
+        audioProbe.run { [weak self] answered in
+            guard let self else { return }
+            self.probeUnanswered = !answered
+            // Bypass may have come on while coreaudiod was being asked.
+            if answered, !self.chain.masterBypass { self.engine.start() }
+            self.refreshIcon()
+        }
+    }
+
     private func tick() {
+        // coreaudiod stopped answering: keep asking, and start again once it does.
+        if audioUnresponsive, !permissionDenied, !chain.masterBypass, !audioProbe.isRunning,
+           Date().timeIntervalSince(lastAutomaticStart) >= Self.unresponsiveRetryInterval {
+            lastAutomaticStart = Date()
+            startEngine()
+        }
         // Permission granted in System Settings while we were refused: start now,
         // without waiting for Retry.
         if permissionDenied, PermissionAdvice.shouldStart(denied: true, now: AudioPermission.status()) {
@@ -331,6 +484,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private var health: Health {
         if permissionDenied { return .error }
+        if audioUnresponsive { return .error }
         if case .failed = engine.state { return .error }
         if !slotErrors.isEmpty { return .error }
         if uadWarning != nil { return .error }
@@ -341,20 +495,53 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var uadWarning: String? { UADCheck.warning(chain: chain, hardwarePresent: uad.isPresent) }
 
     private func refreshIcon() {
+        refreshGlyph()
+        refreshStatusRows()
+    }
+
+    /// Just the icon, for animation frames.
+    private func refreshGlyph() {
         let state: CaterpillarState
         switch health {
         case .processing: state = .processing
         case .bypassed: state = .bypassed
         case .error: state = .error
         }
-        controller?.setIcon(CharacterIcon.caterpillar(effects: runner.activeCount, state: state, running: runTime))
-        refreshStatusRows()
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let sleeping = asleep ? (reduceMotion ? 0 : ProcessInfo.processInfo.systemUptime - sleepStart) : nil
+        updateSleepTimer(running: sleeping != nil && !reduceMotion && !displaysAsleep)
+        let icon = CharacterIcon.caterpillar(effects: runner.activeCount, state: state, running: runTime,
+                                             walking: walker.walk, sleeping: sleeping, headphones: exclusive.isEnabled)
+        guard icon !== shownIcon else { return }
+        shownIcon = icon
+        controller?.setIcon(icon)
+    }
+
+    /// Bypassed (and not in error), Carol sleeps, once any walk has wound down.
+    private var asleep: Bool { chain.masterBypass && health == .bypassed && walker.walk == nil }
+
+    private func updateSleepTimer(running: Bool) {
+        if running, sleepTimer == nil {
+            sleepStart = ProcessInfo.processInfo.systemUptime
+            let timer = Timer(timeInterval: CharacterIcon.caterpillarSleepFrameInterval, repeats: true) { [weak self] _ in
+                self?.refreshGlyph()
+            }
+            timer.tolerance = CharacterIcon.caterpillarSleepFrameInterval / 10
+            // Common modes: she keeps breathing while a menu is open.
+            RunLoop.main.add(timer, forMode: .common)
+            sleepTimer = timer
+        } else if !running, let timer = sleepTimer {
+            timer.invalidate()
+            sleepTimer = nil
+        }
     }
 
     /// The menu's status block: output device (and a warning if it is virtual), what
     /// is running, and the format.
     private var statusLines: [String] {
         if permissionDenied { return ["System audio recording isn't allowed"] }
+        if audioUnresponsive { return [CoreAudioHealth.message] }
+        if chain.masterBypass, engine.state == .stopped { return ["Bypassed", "Audio goes straight to the output"] }
         switch engine.state {
         case .stopped:
             return ["Starting…"]
@@ -379,6 +566,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         statusRows = statusLines.map(disabled)
         statusRows.forEach(menu.addItem)
         if let notice { menu.addItem(disabled(notice)) }
+        if let kept = exclusive.statusLine { menu.addItem(disabled(kept)) }
         for error in slotErrors { menu.addItem(disabled(error)) }
         if let uadWarning { menu.addItem(disabled(uadWarning)) }
         menu.addItem(.separator())
@@ -390,6 +578,12 @@ final class AppController: NSObject, NSApplicationDelegate {
                                         status: AudioPermission.status()) {
             menu.addItem(item("Grant System Audio Recording…", #selector(grantPermission)))
         }
+        if audioUnresponsive {
+            let fix = item("Copy Restart Command", #selector(copyRestartCommand))
+            fix.toolTip = "Copies “\(CoreAudioHealth.restartCommand)”. Paste it into Terminal: macOS restarts "
+                + "its audio service, and SoundChain reconnects by itself."
+            menu.addItem(fix)
+        }
         if permissionDenied || engine.state.isFailed {
             menu.addItem(item("Retry", #selector(retry)))
         }
@@ -400,6 +594,16 @@ final class AppController: NSObject, NSApplicationDelegate {
             reconnect.toolTip = "For when headphones go silent. Saves recent Bluetooth logs to ~/Library/Logs/SoundChain first."
             menu.addItem(reconnect)
         }
+        // Carol wears her headphones while this is on, and round her neck while it is off.
+        menu.addItem(ToggleMenuItem.make(
+            title: "Keep Headphones to This Mac", isOn: exclusive.isEnabled,
+            toolTip: "Bose headphones only. While they are the output, any other device connected to them "
+                + "(your phone) is disconnected, now and every \(Int(BoseExclusive.interval)) seconds, "
+                + "so the radio is not shared and the sound stays clean."
+        ) { [weak self] on in
+            self?.exclusive.isEnabled = on
+            self?.refreshIcon()
+        })
         menu.addItem(.separator())
 
         // The chain itself, in order: a tick means the effect is on. Clicking
@@ -418,7 +622,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
-        menu.addItem(ToggleMenuItem.make(title: "Bypass", isOn: chain.masterBypass) { [weak self] on in
+        menu.addItem(ToggleMenuItem.make(
+            title: "Bypass", isOn: chain.masterBypass,
+            toolTip: "Takes SoundChain out of the audio path: apps play straight to the output."
+        ) { [weak self] on in
             self?.setBypass(on)
         })
         // Settings ▸ holds only the shared rows (Start at Login, Version):
@@ -556,12 +763,36 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func setBypass(_ on: Bool) {
         notice = nil
-        mutate { $0.masterBypass = on }
+        mutate { $0.masterBypass = on }     // the effects fade out (or in) at once
+        scheduleRouting()
         refreshIcon()
         refreshStatusRows()
     }
 
+    private func scheduleRouting() {
+        routingWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.applyRouting() }
+        routingWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.routingDelay, execute: work)
+    }
+
+    /// Bypassed: remove the tap and aggregate device. Not: build them again.
+    private func applyRouting() {
+        if chain.masterBypass {
+            if engine.state != .stopped { engine.stop() }
+            probeUnanswered = false
+        } else if engine.state == .stopped {
+            startAudio()
+        }
+        refreshIcon()
+    }
+
     @objc private func grantPermission() { AudioPermission.openSettings() }
+
+    @objc private func copyRestartCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(CoreAudioHealth.restartCommand, forType: .string)
+    }
 
     @objc private func retry() {
         notice = nil
