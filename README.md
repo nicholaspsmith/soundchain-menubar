@@ -104,7 +104,7 @@ manner (still under Reduce Motion, and parked while the displays sleep).
 Now and then Carol runs on the spot for a second (not while she is walking).
 When several Menumon mascots are running they take turns, a second apart:
 Archimedes (Claude Usage), Menu Pimp (Mac Daddy), Carol (SoundChain),
-Iguanamous (VPN & DNS), then Armonitor (Monitor Lizard), counting only the
+Iguanamous (VPN & DNS), then Armonitor (Panes), counting only the
 ones that are running. Both are skipped when Reduce Motion is on.
 
 ### Virtual outputs and UAD plugins
