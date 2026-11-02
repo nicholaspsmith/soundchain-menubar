@@ -7,6 +7,10 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.21.0] - 2026-11-01
+
+- No user-visible changes.
+
 ## [1.20.0] - 2026-10-20
 
 - The Icon picker has moved from the Settings submenu to the main menu, appearing directly below the Settings option and above Quit.
