@@ -9,9 +9,11 @@ and publishes the section as the release notes. Versions follow
 
 ## [1.24.0] - 2026-11-03
 
-- Preferences are now accessed via a dedicated window (⌘,) instead of a submenu, featuring grouped settings, a login toggle, and an icon picker.
-- Menus can now stay open after selecting an option, and sections can be collapsed to hide rows.
-- Read-only information rows in menus are now displayed in grey text.
+- Long menu items with a status icon are no longer clipped at the end.
+- The Settings submenu has been replaced by a standard Preferences window (⌘,) that includes a Start at Login toggle and an icon picker.
+- Selecting most menu options now keeps the menu open, allowing you to make multiple selections without closing it.
+- Menu sections can now be collapsed and expanded using a chevron heading.
+- Read-only information rows in the menu are now always displayed in grey text.
 
 ## [1.23.0] - 2026-11-03
 
