@@ -13,7 +13,7 @@ through whatever output is current.
 
 Built on [StatusItemKit](https://github.com/nicholaspsmith/StatusItemKit).
 
-**Version 1.22.1** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
+**Version 1.23.0** · [Changelog](https://github.com/nicholaspsmith/soundchain-menubar/releases)
 
 <p align="center"><img src="docs/menubar-icon-large.png" width="360" alt="SoundChain's menu-bar caterpillar, large"></p>
 
@@ -39,7 +39,7 @@ cd soundchain-menubar && ./install.sh
 Start at Login, then (re)launches the app. On first launch, allow **System
 Audio Recording** when asked.
 
-Start at Login is also in **Settings ▸ Start at Login**, or run the installed binary:
+Start at Login is also in **Preferences…** (⌘, in the menu), or run the installed binary:
 `"$HOME/Applications/SoundChain.app/Contents/MacOS/SoundChain" --login on`
 (or `off`, `status`).
 
@@ -74,8 +74,15 @@ Start at Login is also in **Settings ▸ Start at Login**, or run the installed 
   and fades the effects back in; a quick on-off-on settles for 0.3 s first. The
   status line says "Audio goes straight to the output". Ticking it (or an effect)
   updates the status line at the top in place.
-- **Settings ▸** holds Start at Login and the running version (StatusItemKit's
-  shared `SettingsMenu`); **Quit SoundChain** (⌘Q) is below it.
+- Picking anything in the menu (an effect, Bypass, Keep Headphones to This Mac,
+  Retry, Reconnect, Copy Restart Command) leaves it open, with its tick or text
+  updated in place; only **Quit** and the items ending in "…" close it. The
+  status lines, notices and errors at the top are grey, since they are not
+  buttons, and they update in place too (a notice comes or goes without
+  reopening the menu).
+- **Preferences…** (⌘,) opens the SoundChain Preferences window (StatusItemKit's
+  shared one, as in Mac Daddy): Start at Login under General, and the running
+  version at the bottom. Esc or ⌘W closes it. **Quit SoundChain** (⌘Q) is below it.
 - Settings save to `~/Library/Application Support/SoundChain/chain.json`, including
   each plugin's own state (captured when its editor closes, every 5 s while one is
   open, and at quit).

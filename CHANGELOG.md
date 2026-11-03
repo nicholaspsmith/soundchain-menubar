@@ -7,6 +7,13 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.23.0] - 2026-11-03
+
+- Settings have moved out of the Settings submenu into a SoundChain Preferences window (menu ▸ Preferences…, ⌘,), like Mac Daddy's: Start at Login under General, and the version at the bottom. Esc or ⌘W closes it. The menu now ends with Preferences… and Quit SoundChain.
+- Picking an option in the menu leaves it open, with its tick or text updated in place: Retry, Reconnect and Copy Restart Command now work like the effect and Bypass checkboxes. Only Quit and the items ending in "…" close the menu.
+- The status lines, notices and errors at the top of the menu are drawn grey, so nothing you can't click looks clickable, and they update while the menu is open (a reconnect's result appears without reopening it).
+- Copy Restart Command says "Restart Command Copied" once clicked, and Reconnect turns into "Reconnecting …" while it runs.
+
 ## [1.22.2] - 2026-11-02
 
 - The Apollo Monitor icon now displays the audio level in grey when it cannot be controlled (e.g., due to missing permissions or connectivity issues), instead of appearing dark.
