@@ -53,9 +53,7 @@ final class CrashGuardTests: XCTestCase {
     }
 
     func testUserDefaultsConforms() {
-        let suite = "CrashGuardTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = scratchDefaults("CrashGuardTests")
         _ = CrashGuard(store: defaults).recordLaunch()
         _ = CrashGuard(store: defaults).recordLaunch()
         XCTAssertTrue(CrashGuard(store: defaults).recordLaunch())
