@@ -7,6 +7,11 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.24.1] - 2026-11-03
+
+- Updated StatusItemKit to 0.38.3
+- Fixed a bug where clicking a folding menu heading did nothing.
+
 ## [1.24.0] - 2026-11-03
 
 - Fixed alignment of status dots in keep-open menu rows so titles line up with other items.
