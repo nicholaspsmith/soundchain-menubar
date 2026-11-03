@@ -62,6 +62,10 @@ public final class TimedProbe: @unchecked Sendable {
     private let work: () -> Void
     private let lock = NSLock()
     private var running = false
+    /// Counts calls, so a timeout only marks the call it was set for.
+    private var call = 0
+    /// The call still out has already been reported as no answer.
+    private var stuck = false
 
     public init(timeout: TimeInterval, queue: DispatchQueue = .global(qos: .utility), work: @escaping () -> Void) {
         self.timeout = timeout
@@ -77,13 +81,26 @@ public final class TimedProbe: @unchecked Sendable {
 
     /// Starts the call and returns true, or returns false if one is still out.
     /// `done` runs once on main: true if the call came back in time, else false.
+    ///
+    /// While a call is out, a second `run` starts nothing. If that call has
+    /// already been reported as no answer, the second `done` is told so too
+    /// (false), so its caller knows nothing started and can try again once
+    /// `isRunning` is false. If it is still within its timeout, the second `done`
+    /// is never called: the first call's answer stands for both.
     @discardableResult
     public func run(_ done: @escaping (Bool) -> Void) -> Bool {
         lock.lock()
-        let busy = running
+        if running {
+            let unanswered = stuck
+            lock.unlock()
+            if unanswered { DispatchQueue.main.async { done(false) } }
+            return false
+        }
         running = true
+        stuck = false
+        call += 1
+        let thisCall = call
         lock.unlock()
-        guard !busy else { return false }
         var reported = false   // main thread only
         let report = { (answered: Bool) in
             guard !reported else { return }
@@ -97,7 +114,12 @@ public final class TimedProbe: @unchecked Sendable {
             self.lock.unlock()
             DispatchQueue.main.async { report(true) }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { report(false) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+            self.lock.lock()
+            if self.running, self.call == thisCall { self.stuck = true }
+            self.lock.unlock()
+            report(false)
+        }
         return true
     }
 }

@@ -79,12 +79,13 @@ final class TimedProbeTests: XCTestCase {
     // coreaudiod must not collect a thread per tick.
     func testOneProbeAtATime() {
         let release = DispatchSemaphore(value: 0)
-        let probe = TimedProbe(timeout: 0.05) { release.wait() }
+        let calls = Counter()
+        let probe = TimedProbe(timeout: 0.05) { calls.increment(); release.wait() }
         let first = expectation(description: "first reported")
         XCTAssertTrue(probe.run { _ in first.fulfill() })
         wait(for: [first], timeout: 2)
         XCTAssertTrue(probe.isRunning)
-        XCTAssertFalse(probe.run { _ in XCTFail("a second probe ran") })
+        XCTAssertFalse(probe.run { _ in })
         release.signal()
         let finished = expectation(description: "stuck call returned")
         DispatchQueue.global().async {
@@ -92,8 +93,49 @@ final class TimedProbeTests: XCTestCase {
             finished.fulfill()
         }
         wait(for: [finished], timeout: 2)
+        XCTAssertEqual(calls.value, 1, "a second probe ran")
         let again = expectation(description: "runs again")
         XCTAssertTrue(probe.run { _ in again.fulfill() })
         wait(for: [again], timeout: 2)
     }
+
+    // Asking again while the last call is still stuck past its timeout is
+    // answered "no answer" at once, without a second call: dropping it would
+    // leave the caller believing audio is starting (Bypass on, then off, while
+    // coreaudiod hangs left the engine stopped for good).
+    func testAskingWhileTheLastCallIsStuckReportsNoAnswer() {
+        let release = DispatchSemaphore(value: 0)
+        let calls = Counter()
+        let probe = TimedProbe(timeout: 0.05) { calls.increment(); release.wait() }
+        let first = expectation(description: "first timed out")
+        XCTAssertTrue(probe.run { answered in XCTAssertFalse(answered); first.fulfill() })
+        wait(for: [first], timeout: 2)
+        let second = expectation(description: "second reported")
+        XCTAssertFalse(probe.run { answered in XCTAssertFalse(answered); second.fulfill() })
+        wait(for: [second], timeout: 2)
+        XCTAssertEqual(calls.value, 1, "a second probe ran")
+        release.signal()
+    }
+
+    // A call still within its timeout answers for whoever asks meanwhile: the
+    // second request is not reported, so nothing starts twice.
+    func testAskingWhileTheLastCallIsPendingIsNotReported() {
+        let release = DispatchSemaphore(value: 0)
+        let probe = TimedProbe(timeout: 5) { release.wait() }
+        let first = expectation(description: "first answered")
+        XCTAssertTrue(probe.run { answered in XCTAssertTrue(answered); first.fulfill() })
+        XCTAssertFalse(probe.run { _ in XCTFail("the second request was reported") })
+        release.signal()
+        wait(for: [first], timeout: 2)
+        let settle = expectation(description: "main queue drained")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { settle.fulfill() }
+        wait(for: [settle], timeout: 2)
+    }
+}
+
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+    func increment() { lock.lock(); count += 1; lock.unlock() }
 }
