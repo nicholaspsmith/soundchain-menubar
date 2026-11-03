@@ -300,6 +300,9 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     /// Starts the engine once coreaudiod has answered the probe. If it does not
     /// answer in time the menu says so, and `tick` asks again until it does.
+    /// A probe still stuck from an earlier attempt answers no at once (Bypass
+    /// clears `probeUnanswered`, so switching it off mid-hang must set it again,
+    /// or nothing would ever start the engine).
     private func startEngine() {
         audioProbe.run { [weak self] answered in
             guard let self else { return }
