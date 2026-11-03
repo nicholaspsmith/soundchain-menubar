@@ -7,6 +7,14 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.24.0] - 2026-11-03
+
+- Fixed alignment of status dots in keep-open menu rows so titles line up with other items.
+- Prevented long keep-open menu rows with status dots from being clipped.
+- Replaced the Settings submenu with a standard Preferences window (⌘,) featuring grouped settings, a Start at Login toggle, and an icon picker.
+- Added collapsible sections to menus, allowing you to fold away groups of options.
+- Ensured informational menu rows always appear greyed out, even when the menu is open.
+
 ## [1.23.0] - 2026-11-03
 
 - Settings have moved out of the Settings submenu into a SoundChain Preferences window (menu ▸ Preferences…, ⌘,), like Mac Daddy's: Start at Login under General, and the version at the bottom. Esc or ⌘W closes it. The menu now ends with Preferences… and Quit SoundChain.
