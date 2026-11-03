@@ -11,8 +11,14 @@ import StatusItemKit
 @available(macOS 14.2, *)
 final class AppController: NSObject, NSApplicationDelegate {
     private var controller: StatusItemController!
-    /// The status block of the menu last built, refreshed in place while it is open.
-    private var statusRows: [NSMenuItem] = []
+    /// The read-only block of the menu last built (status, notices, errors),
+    /// refreshed in place while it is open: picking an option leaves the menu up.
+    private var infoRows: [NSMenuItem] = []
+    /// The menu's Retry and Reconnect rows, kept current while it is open.
+    private weak var retryItem: NSMenuItem?
+    private weak var reconnectItem: NSMenuItem?
+    private var reconnectName: String?
+    private lazy var preferences = SoundChainPreferences.makePane()
     private var yieldClient: YieldClient!
     /// Once a minute, in her turn with the other animated mascots, Carol runs
     /// on the spot for a second. `runTime` is seconds into the run, nil at rest.
@@ -274,7 +280,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         menu.addItem(disabled("Another SoundChain is running"))
         menu.addItem(disabled("This copy stays out of the audio"))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        // No Preferences… here: Start at Login belongs to the copy that runs.
+        let quit = NSMenuItem(title: "Quit SoundChain", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        quit.target = NSApp
+        menu.addItem(quit)
     }
 
     // MARK: Starting audio
@@ -559,19 +568,19 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Menu lines longer than this are cut short (full text in the tooltip), so a
-    /// long device name or error cannot stretch the whole menu.
-    static let menuLineLimit = 34
+    /// Everything in the menu's read-only block, in order.
+    private var infoLines: [String] {
+        MenuLines.info(status: statusLines, notice: notice, headphones: exclusive.statusLine,
+                       errors: slotErrors, uadWarning: uadWarning)
+    }
+
+    private var canRetry: Bool { permissionDenied || engine.state.isFailed }
 
     // MARK: Menu
 
     private func buildMenu(_ menu: NSMenu) {
-        statusRows = statusLines.map(disabled)
-        statusRows.forEach(menu.addItem)
-        if let notice { menu.addItem(disabled(notice)) }
-        if let kept = exclusive.statusLine { menu.addItem(disabled(kept)) }
-        for error in slotErrors { menu.addItem(disabled(error)) }
-        if let uadWarning { menu.addItem(disabled(uadWarning)) }
+        infoRows = infoLines.map(disabled)
+        infoRows.forEach(menu.addItem)
         menu.addItem(.separator())
 
         let chainItem = item("Audio Chain…", #selector(editChain), key: "c")
@@ -582,19 +591,29 @@ final class AppController: NSObject, NSApplicationDelegate {
             menu.addItem(item("Grant System Audio Recording…", #selector(grantPermission)))
         }
         if audioUnresponsive {
-            let fix = item("Copy Restart Command", #selector(copyRestartCommand))
+            let fix = item(MenuLines.copyRestart, #selector(copyRestartCommand(_:)))
             fix.toolTip = "Copies “\(CoreAudioHealth.restartCommand)”. Paste it into Terminal: macOS restarts "
                 + "its audio service, and SoundChain reconnects by itself."
             menu.addItem(fix)
         }
-        if permissionDenied || engine.state.isFailed {
-            menu.addItem(item("Retry", #selector(retry)))
+        retryItem = nil
+        if canRetry {
+            let retry = item("Retry", #selector(retry))
+            retryItem = retry
+            menu.addItem(retry)
         }
+        reconnectItem = nil
+        reconnectName = nil
         if let target = BluetoothReconnect.currentTarget() {
-            let reconnect = item(bluetooth.inProgress ? "Reconnecting \(target.name)…" : "Reconnect \(target.name)",
-                                 #selector(reconnectBluetooth))
+            // Sized for its longer "Reconnecting …" title, and a keep-open row from
+            // the start: that title ends in "…", which `KeepOpenMenu` would skip.
+            let reconnect = item(MenuLines.reconnect(target.name, inProgress: true), #selector(reconnectBluetooth))
+            reconnect.view = KeepOpenMenuRow(item: reconnect)
+            reconnect.title = MenuLines.reconnect(target.name, inProgress: bluetooth.inProgress)
             reconnect.isEnabled = !bluetooth.inProgress
             reconnect.toolTip = "For when headphones go silent. Saves recent Bluetooth logs to ~/Library/Logs/SoundChain first."
+            reconnectItem = reconnect
+            reconnectName = target.name
             menu.addItem(reconnect)
         }
         // Carol wears her headphones while this is on, and round her neck while it is off.
@@ -631,9 +650,13 @@ final class AppController: NSObject, NSApplicationDelegate {
         ) { [weak self] on in
             self?.setBypass(on)
         })
-        // Settings ▸ holds only the shared rows (Start at Login, Version):
-        // everything SoundChain itself offers is a control used day to day.
-        SettingsMenu.addFooter(to: menu, appName: "SoundChain")
+        // Preferences… holds only the shared settings (Start at Login, the
+        // version): everything SoundChain itself offers is a control used day to day.
+        PreferencesMenu.addFooter(to: menu, appName: SoundChainPreferences.appName) { [weak self] in
+            self?.preferences.show()
+        }
+        // Options leave the menu open (all but Quit and the "…" items).
+        KeepOpenMenu.apply(to: menu.items)
     }
 
     private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
@@ -642,25 +665,46 @@ final class AppController: NSObject, NSApplicationDelegate {
         return item
     }
 
+    /// A read-only row: disabled, so it draws grey.
     private func disabled(_ title: String) -> NSMenuItem {
-        let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        item.isEnabled = false
+        let item = InfoMenuItem.make("")
         setLine(item, title)
         return item
     }
 
     private func setLine(_ item: NSMenuItem, _ title: String) {
-        let short = title.count > Self.menuLineLimit ? String(title.prefix(Self.menuLineLimit - 1)) + "…" : title
-        item.title = short
-        item.toolTip = short != title ? title : nil
+        let fit = MenuLines.fit(title)
+        if item.title != fit.title { item.title = fit.title }
+        item.toolTip = fit.toolTip
     }
 
-    /// Brings the open menu's status block ("2 effects running", "Bypassed")
-    /// up to date after a tick, since ticking no longer closes the menu.
+    /// Brings the open menu up to date after a tick or a click, since neither
+    /// closes it: the read-only block ("2 effects running", "Bypassed", a notice
+    /// that came or went, rows added or removed as needed), and the Retry and
+    /// Reconnect rows.
     private func refreshStatusRows() {
-        let lines = statusLines
-        guard lines.count == statusRows.count else { return }
-        zip(statusRows, lines).forEach { setLine($0, $1) }
+        guard let first = infoRows.first, let menu = first.menu else { return }
+        let lines = infoLines
+        while infoRows.count > max(lines.count, 1) { menu.removeItem(infoRows.removeLast()) }
+        while infoRows.count < lines.count, let last = infoRows.last {
+            let row = disabled("")
+            menu.insertItem(row, at: menu.index(of: last) + 1)
+            infoRows.append(row)
+        }
+        zip(infoRows, lines).forEach { setLine($0, $1) }
+
+        if let retry = retryItem, retry.isEnabled != canRetry {
+            retry.isEnabled = canRetry
+            (retry.view as? KeepOpenMenuRow)?.updateColors()
+        }
+        if let reconnect = reconnectItem, let name = reconnectName {
+            let title = MenuLines.reconnect(name, inProgress: bluetooth.inProgress)
+            if reconnect.title != title || reconnect.isEnabled == bluetooth.inProgress {
+                reconnect.title = title
+                reconnect.isEnabled = !bluetooth.inProgress
+                (reconnect.view as? KeepOpenMenuRow)?.updateColors()
+            }
+        }
     }
 
     /// A menu-bar app has no menu bar of its own, so nothing routes ⌘A/⌘C/⌘V/⌘X/⌘Z to
@@ -792,9 +836,11 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     @objc private func grantPermission() { AudioPermission.openSettings() }
 
-    @objc private func copyRestartCommand() {
+    @objc private func copyRestartCommand(_ sender: NSMenuItem) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(CoreAudioHealth.restartCommand, forType: .string)
+        // The menu stays open, so say it worked.
+        sender.title = MenuLines.copiedRestart
     }
 
     @objc private func retry() {
@@ -802,12 +848,27 @@ final class AppController: NSObject, NSApplicationDelegate {
         runner.clearErrors()
         runner.sync(to: chain)
         startAudio()
+        refreshStatusRows()
     }
 
     @objc private func reconnectBluetooth() {
         guard let target = BluetoothReconnect.currentTarget() else { return }
         notice = nil
         bluetooth.reconnect(target)
+        refreshStatusRows()
+    }
+}
+
+// The menu enables Retry and Reconnect as it opens (its items validate
+// automatically, which would undo a plain `isEnabled = false`).
+@available(macOS 14.2, *)
+extension AppController: NSMenuItemValidation {
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(retry): return canRetry
+        case #selector(reconnectBluetooth): return !bluetooth.inProgress
+        default: return true
+        }
     }
 }
 
