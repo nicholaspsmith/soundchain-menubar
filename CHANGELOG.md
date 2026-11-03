@@ -7,6 +7,12 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.24.0] - 2026-11-03
+
+- Preferences are now accessed via a dedicated window (⌘,) instead of a submenu, featuring grouped settings, a login toggle, and an icon picker.
+- Menus can now stay open after selecting an option, and sections can be collapsed to hide rows.
+- Read-only information rows in menus are now displayed in grey text.
+
 ## [1.23.0] - 2026-11-03
 
 - Settings have moved out of the Settings submenu into a SoundChain Preferences window (menu ▸ Preferences…, ⌘,), like Mac Daddy's: Start at Login under General, and the version at the bottom. Esc or ⌘W closes it. The menu now ends with Preferences… and Quit SoundChain.
