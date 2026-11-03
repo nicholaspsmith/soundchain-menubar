@@ -9,11 +9,11 @@ and publishes the section as the release notes. Versions follow
 
 ## [1.24.0] - 2026-11-03
 
-- Long menu items with a status icon are no longer clipped at the end.
-- The Settings submenu has been replaced by a standard Preferences window (⌘,) that includes a Start at Login toggle and an icon picker.
-- Selecting most menu options now keeps the menu open, allowing you to make multiple selections without closing it.
-- Menu sections can now be collapsed and expanded using a chevron heading.
-- Read-only information rows in the menu are now always displayed in grey text.
+- Fixed alignment of status dots in keep-open menu rows so titles line up with other items.
+- Prevented long keep-open menu rows with status dots from being clipped.
+- Replaced the Settings submenu with a standard Preferences window (⌘,) featuring grouped settings, a Start at Login toggle, and an icon picker.
+- Added collapsible sections to menus, allowing you to fold away groups of options.
+- Ensured informational menu rows always appear greyed out, even when the menu is open.
 
 ## [1.23.0] - 2026-11-03
 
