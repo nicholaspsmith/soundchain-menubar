@@ -37,7 +37,7 @@ final class BoseExclusive {
     /// Addresses that turned out not to speak Bose's protocol; left alone from then on.
     private var unsupported: Set<String> = []
     private var timer: Timer?
-    private var session: Session?
+    private let conversation = BoseConversationSlot()
     private let log = Logger(subsystem: "com.nicholaspsmith.SoundChain", category: "bose")
     private var stopped = false
     /// Checks in a row that could not open the channel. bluetoothd can be left
@@ -83,13 +83,14 @@ final class BoseExclusive {
         stopped = true
         timer?.invalidate()
         timer = nil
-        session?.cancel()
-        session = nil
+        conversation.cancel()
     }
 
     private func apply() {
         timer?.invalidate()
         timer = nil
+        // Whatever was under way was for the old setting or the old output.
+        conversation.cancel()
         guard shouldRun else {
             onChange?()
             return
@@ -110,11 +111,15 @@ final class BoseExclusive {
     }
 
     private func check() {
-        guard !stopped, session == nil, !isBusy(), let target else { return }
-        session = Session(address: target.address) { [weak self] outcome in
-            self?.session = nil
+        guard let target else { return }
+        let connected = IOBluetoothDevice(addressString: target.address)?.isConnected() == true
+        guard BoseLink.shouldCheck(stopped: stopped, busy: isBusy(),
+                                   inConversation: conversation.current != nil,
+                                   connected: connected) else { return }
+        conversation.begin(Session(address: target.address) { [weak self] session, outcome in
+            self?.conversation.finished(session)
             self?.finish(outcome, target: target)
-        }
+        })
     }
 
     private func finish(_ outcome: Session.Outcome, target: BluetoothReconnect.Target) {
@@ -152,7 +157,7 @@ final class BoseExclusive {
     /// Disconnect for each device that is not this Mac. Event-driven on the main
     /// thread: IOBluetooth delivers its callbacks on the run loop of the thread that
     /// opened the channel, and only the main thread's is always running.
-    private final class Session: NSObject, IOBluetoothRFCOMMChannelDelegate {
+    private final class Session: NSObject, IOBluetoothRFCOMMChannelDelegate, BoseConversation {
         enum Outcome {
             /// No Bose service, or the handshake came back wrong.
             case unsupported
@@ -169,7 +174,7 @@ final class BoseExclusive {
         }
 
         private let device: IOBluetoothDevice?
-        private let completion: (Outcome) -> Void
+        private let completion: (Session, Outcome) -> Void
         private var channel: IOBluetoothRFCOMMChannel?
         private var step = Step.handshake
         private var received: [UInt8] = []
@@ -181,10 +186,13 @@ final class BoseExclusive {
         private var deadline: DispatchWorkItem?
         private var done = false
 
-        init(address: String, completion: @escaping (Outcome) -> Void) {
+        init(address: String, completion: @escaping (Session, Outcome) -> Void) {
             device = IOBluetoothDevice(addressString: address)
             self.completion = completion
             super.init()
+        }
+
+        func start() {
             guard let device else { finish(.unreachable("not in Bluetooth")); return }
             if let id = Self.channel(in: device.services) {
                 open(id)
@@ -323,7 +331,7 @@ final class BoseExclusive {
         private func finish(_ outcome: Outcome) {
             guard !done else { return }
             cancel()
-            completion(outcome)
+            completion(self, outcome)
         }
 
         private static func channel(in services: [Any]?) -> BluetoothRFCOMMChannelID? {

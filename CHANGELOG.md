@@ -7,6 +7,12 @@ and publishes the section as the release notes. Versions follow
 [Semantic Versioning](https://semver.org/). The full rule:
 [StatusItemKit — Releases](https://github.com/nicholaspsmith/StatusItemKit#releases-every-push-is-one).
 
+## [1.24.3] - 2026-11-04
+
+- Keep Headphones to This Mac no longer makes your Mac search for the headphones every 30 seconds while they are off. It waits until they are back.
+- Turning Keep Headphones to This Mac off now stops a check that is already running, so it can't disconnect your phone after you've turned it off.
+- Keep Headphones to This Mac no longer stops working until the next launch when Bluetooth refuses a connection outright.
+
 ## [1.24.2] - 2026-11-03
 
 - Updated StatusItemKit to 0.38.4
